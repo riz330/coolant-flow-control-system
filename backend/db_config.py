@@ -1,10 +1,11 @@
 
 # Database configuration settings
+import os
 
 DB_CONFIG = {
-    'host': 'localhost',      # Replace with your PostgreSQL host
-    'database': 'coolant_management',  # Your database name
-    'user': 'postgres',       # Replace with your database username
-    'password': 'password',   # Replace with your database password
-    'port': 5432              # Default PostgreSQL port
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'database': os.environ.get('DB_NAME', 'coolant_management'),
+    'user': os.environ.get('DB_USER', 'postgres'),
+    'password': os.environ.get('DB_PASSWORD', 'password'),
+    'port': int(os.environ.get('DB_PORT', 5432))
 }

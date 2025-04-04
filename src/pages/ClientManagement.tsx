@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,85 +10,26 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 
-// Mock data for clients
-const mockClients = [
-  {
-    id: 1,
-    clientName: 'Acme Industries',
-    city: 'New York',
-    primaryContactPerson: 'John Smith',
-    primaryNumber: '+918765432101',
-    secondaryContactPerson: 'Jane Doe',
-    secondaryNumber: '+918765432102',
-    email: 'contact@acme.com',
-    gstNumber: 'GST1234567890',
-    typesOfMetals: 'Aluminum, Steel, Copper',
-    clientCategory: 'Retail',
-    whatsappNumber: '+918765432101',
-    clientLogo: '/placeholder.svg'
-  },
-  {
-    id: 2,
-    clientName: 'TechFab Solutions',
-    city: 'Chicago',
-    primaryContactPerson: 'Emma Johnson',
-    primaryNumber: '+918765432103',
-    secondaryContactPerson: 'Michael Williams',
-    secondaryNumber: '+918765432104',
-    email: 'contact@techfab.com',
-    gstNumber: 'GST2345678901',
-    typesOfMetals: 'Steel, Titanium',
-    clientCategory: 'Wholesale',
-    whatsappNumber: '+918765432103',
-    clientLogo: '/placeholder.svg'
-  },
-  {
-    id: 3,
-    clientName: 'Precision Manufacturing',
-    city: 'Houston',
-    primaryContactPerson: 'David Brown',
-    primaryNumber: '+918765432105',
-    secondaryContactPerson: 'Sarah Miller',
-    secondaryNumber: '+918765432106',
-    email: 'contact@precision.com',
-    gstNumber: 'GST3456789012',
-    typesOfMetals: 'Stainless Steel, Aluminum',
-    clientCategory: 'Distributor',
-    whatsappNumber: '+918765432105',
-    clientLogo: '/placeholder.svg'
-  },
-  {
-    id: 4,
-    clientName: 'Global Machining Inc.',
-    city: 'Los Angeles',
-    primaryContactPerson: 'Robert Wilson',
-    primaryNumber: '+918765432107',
-    secondaryContactPerson: 'Jennifer Davis',
-    secondaryNumber: '+918765432108',
-    email: 'contact@globalmach.com',
-    gstNumber: 'GST4567890123',
-    typesOfMetals: 'Cast Iron, Aluminum',
-    clientCategory: 'Retail',
-    whatsappNumber: '+918765432107',
-    clientLogo: '/placeholder.svg'
-  },
-  {
-    id: 5,
-    clientName: 'Elite Engineering',
-    city: 'Miami',
-    primaryContactPerson: 'Thomas Anderson',
-    primaryNumber: '+918765432109',
-    secondaryContactPerson: 'Lisa Garcia',
-    secondaryNumber: '+918765432110',
-    email: 'contact@eliteeng.com',
-    gstNumber: 'GST5678901234',
-    typesOfMetals: 'Titanium, Steel',
-    clientCategory: 'Wholesale',
-    whatsappNumber: '+918765432109',
-    clientLogo: '/placeholder.svg'
-  }
-];
+// Define type for client data
+interface Client {
+  id: number;
+  client_name: string;
+  city: string;
+  address: string;
+  primary_contact_person: string;
+  primary_number: string;
+  secondary_contact_person: string;
+  secondary_number: string;
+  email: string;
+  gst_number: string;
+  types_of_metals: string;
+  client_category: string;
+  whatsapp_number: string;
+  client_logo: string;
+  distributor_id?: number;
+}
 
 const metalOptions = [
   { label: 'Aluminum', value: 'Aluminum' },
@@ -108,27 +49,80 @@ const categoryOptions = [
 const ClientManagement = () => {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [clients, setClients] = useState(mockClients);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [distributors, setDistributors] = useState<{id: number, name: string}[]>([]);
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [newClient, setNewClient] = useState({
-    clientName: '',
+    client_name: '',
     city: '',
     address: '',
-    primaryContactPerson: '',
-    primaryMobileNumber: '',
+    primary_contact_person: '',
+    primary_mobile_number: '',
     useAsWhatsapp: true,
-    whatsappNumber: '',
-    secondaryContactPerson: '',
-    secondaryMobileNumber: '',
+    whatsapp_number: '',
+    secondary_contact_person: '',
+    secondary_mobile_number: '',
     email: '',
-    gstNumber: '',
-    typesOfMetals: [] as string[],
-    clientCategory: '',
-    clientLogo: null as File | null
+    gst_number: '',
+    types_of_metals: [] as string[],
+    client_category: '',
+    distributor_id: '',
+    client_logo: null as File | null
   });
   const [previewLogo, setPreviewLogo] = useState('');
+  const [loading, setLoading] = useState(true);
+  
+  // Load clients from API
+  useEffect(() => {
+    fetchClients();
+    fetchDistributors();
+  }, []);
+  
+  const fetchClients = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/clients', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch clients');
+      }
+      
+      const data = await response.json();
+      setClients(data);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+      toast.error('Failed to load clients');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const fetchDistributors = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/distributors/list', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch distributors');
+      }
+      
+      const data = await response.json();
+      setDistributors(data);
+    } catch (error) {
+      console.error('Error fetching distributors:', error);
+    }
+  };
   
   // Filter clients based on role and search term
   const getFilteredClients = () => {
@@ -137,17 +131,18 @@ const ClientManagement = () => {
     // Role-based filtering
     if (user?.role === 'client') {
       // Clients only see their own record
-      filtered = filtered.filter(c => c.id === 1); // For demo, assume client user is id 1
+      const clientGST = user.companyName; // Assumes company name holds GST for clients
+      filtered = filtered.filter(c => c.gst_number === clientGST);
     }
     
     // Search term filtering
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(c => 
-        c.clientName.toLowerCase().includes(term) ||
+        c.client_name.toLowerCase().includes(term) ||
         c.city.toLowerCase().includes(term) ||
-        c.primaryContactPerson.toLowerCase().includes(term) ||
-        c.gstNumber.toLowerCase().includes(term)
+        c.primary_contact_person.toLowerCase().includes(term) ||
+        c.gst_number.toLowerCase().includes(term)
       );
     }
     
@@ -156,98 +151,142 @@ const ClientManagement = () => {
   
   const filteredClients = getFilteredClients();
   
-  const handleAddClient = () => {
-    // For demo purposes, we'll just add a client with the form data
-    const newClientId = clients.length + 1;
-    
-    const clientToAdd = {
-      id: newClientId,
-      clientName: newClient.clientName,
-      city: newClient.city,
-      primaryContactPerson: newClient.primaryContactPerson,
-      primaryNumber: '+91' + newClient.primaryMobileNumber,
-      secondaryContactPerson: newClient.secondaryContactPerson || '-',
-      secondaryNumber: newClient.secondaryMobileNumber ? ('+91' + newClient.secondaryMobileNumber) : '-',
-      email: newClient.email,
-      gstNumber: newClient.gstNumber,
-      typesOfMetals: newClient.typesOfMetals.join(', '),
-      clientCategory: newClient.clientCategory,
-      whatsappNumber: newClient.useAsWhatsapp 
-        ? ('+91' + newClient.primaryMobileNumber) 
-        : ('+91' + newClient.whatsappNumber),
-      clientLogo: previewLogo || '/placeholder.svg'
-    };
-    
-    if (isEditMode && selectedClient) {
-      // Update existing client
-      const updatedClients = clients.map(c => {
-        if (c.id === selectedClient.id) {
-          return { ...clientToAdd, id: selectedClient.id };
-        }
-        return c;
+  const handleAddClient = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      
+      // Add all client details to formData
+      formData.append('client_name', newClient.client_name);
+      formData.append('city', newClient.city);
+      formData.append('address', newClient.address);
+      formData.append('primary_contact_person', newClient.primary_contact_person);
+      formData.append('primary_mobile_number', newClient.primary_mobile_number);
+      
+      if (newClient.useAsWhatsapp) {
+        formData.append('whatsapp_number', newClient.primary_mobile_number);
+      } else {
+        formData.append('whatsapp_number', newClient.whatsapp_number);
+      }
+      
+      formData.append('secondary_contact_person', newClient.secondary_contact_person || '');
+      formData.append('secondary_mobile_number', newClient.secondary_mobile_number || '');
+      formData.append('email', newClient.email);
+      formData.append('gst_number', newClient.gst_number);
+      formData.append('types_of_metals', newClient.types_of_metals.join(', '));
+      formData.append('client_category', newClient.client_category);
+      formData.append('distributor_id', newClient.distributor_id);
+      
+      if (newClient.client_logo) {
+        formData.append('client_logo', newClient.client_logo);
+      }
+      
+      let url = 'http://localhost:5000/api/clients';
+      let method = 'POST';
+      
+      if (isEditMode && selectedClient) {
+        url = `http://localhost:5000/api/clients/${selectedClient.id}`;
+        method = 'PUT';
+      }
+      
+      const response = await fetch(url, {
+        method: method,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
       });
-      setClients(updatedClients);
-    } else {
-      // Add new client
-      setClients([...clients, clientToAdd]);
+      
+      if (!response.ok) {
+        throw new Error(isEditMode ? 'Failed to update client' : 'Failed to add client');
+      }
+      
+      // Refresh the client list
+      await fetchClients();
+      
+      toast.success(isEditMode ? 'Client updated successfully' : 'Client added successfully');
+      
+      // Reset form and close modal
+      resetForm();
+      setIsAddClientModalOpen(false);
+    } catch (error) {
+      console.error('Error saving client:', error);
+      toast.error(isEditMode ? 'Failed to update client' : 'Failed to add client');
     }
-    
-    // Reset form and close modal
-    resetForm();
-    setIsAddClientModalOpen(false);
   };
   
-  const handleEditClient = (client: any) => {
+  const handleEditClient = (client: Client) => {
     setIsEditMode(true);
     setSelectedClient(client);
     
     // Parse metals from comma-separated string to array
-    const metalsArray = client.typesOfMetals.split(', ').map((m: string) => m.trim());
+    const metalsArray = client.types_of_metals.split(', ').map((m: string) => m.trim());
     
     // Set form values
     setNewClient({
-      clientName: client.clientName,
+      client_name: client.client_name,
       city: client.city,
       address: client.address || '',
-      primaryContactPerson: client.primaryContactPerson,
-      primaryMobileNumber: client.primaryNumber.replace('+91', ''),
-      useAsWhatsapp: client.primaryNumber === client.whatsappNumber,
-      whatsappNumber: client.whatsappNumber.replace('+91', ''),
-      secondaryContactPerson: client.secondaryContactPerson !== '-' ? client.secondaryContactPerson : '',
-      secondaryMobileNumber: client.secondaryNumber !== '-' ? client.secondaryNumber.replace('+91', '') : '',
+      primary_contact_person: client.primary_contact_person,
+      primary_mobile_number: client.primary_number.replace('+91', ''),
+      useAsWhatsapp: client.primary_number === client.whatsapp_number,
+      whatsapp_number: client.whatsapp_number.replace('+91', ''),
+      secondary_contact_person: client.secondary_contact_person !== '-' ? client.secondary_contact_person : '',
+      secondary_mobile_number: client.secondary_number !== '-' ? client.secondary_number.replace('+91', '') : '',
       email: client.email,
-      gstNumber: client.gstNumber,
-      typesOfMetals: metalsArray,
-      clientCategory: client.clientCategory,
-      clientLogo: null
+      gst_number: client.gst_number,
+      types_of_metals: metalsArray,
+      client_category: client.client_category,
+      distributor_id: client.distributor_id ? client.distributor_id.toString() : '',
+      client_logo: null
     });
     
-    setPreviewLogo(client.clientLogo);
+    setPreviewLogo(client.client_logo);
     
     setIsAddClientModalOpen(true);
   };
   
-  const handleDeleteClient = (clientId: number) => {
-    // In a real app, we would make an API call to delete the client
-    setClients(clients.filter(c => c.id !== clientId));
+  const handleDeleteClient = async (clientId: number) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/clients/${clientId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete client');
+      }
+      
+      // Refresh the client list
+      await fetchClients();
+      
+      toast.success('Client deleted successfully');
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      toast.error('Failed to delete client');
+    }
   };
   
   const resetForm = () => {
     setNewClient({
-      clientName: '',
+      client_name: '',
       city: '',
       address: '',
-      primaryContactPerson: '',
-      primaryMobileNumber: '',
+      primary_contact_person: '',
+      primary_mobile_number: '',
       useAsWhatsapp: true,
-      whatsappNumber: '',
-      secondaryContactPerson: '',
-      secondaryMobileNumber: '',
+      whatsapp_number: '',
+      secondary_contact_person: '',
+      secondary_mobile_number: '',
       email: '',
-      gstNumber: '',
-      typesOfMetals: [],
-      clientCategory: '',
-      clientLogo: null
+      gst_number: '',
+      types_of_metals: [],
+      client_category: '',
+      distributor_id: '',
+      client_logo: null
     });
     setPreviewLogo('');
     setIsEditMode(false);
@@ -260,17 +299,17 @@ const ClientManagement = () => {
     
     // Check file type
     if (!file.type.match('image/(jpeg|jpg|png)')) {
-      alert('File type not allowed. Please upload a JPG or PNG image.');
+      toast.error('File type not allowed. Please upload a JPG or PNG image.');
       return;
     }
     
     // Check file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      alert('File size exceeds 2MB limit.');
+      toast.error('File size exceeds 2MB limit.');
       return;
     }
     
-    setNewClient({ ...newClient, clientLogo: file });
+    setNewClient({ ...newClient, client_logo: file });
     
     // Create preview URL
     const reader = new FileReader();
@@ -320,75 +359,81 @@ const ClientManagement = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Client Name</th>
-                    <th>City</th>
-                    <th>Primary Contact</th>
-                    <th>Primary Number</th>
-                    <th>Email</th>
-                    <th>GST Number</th>
-                    <th>Client Category</th>
-                    <th>Logo</th>
-                    <th className="text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClients.length > 0 ? (
-                    filteredClients.map((client) => (
-                      <tr key={client.id}>
-                        <td className="font-medium">{client.clientName}</td>
-                        <td>{client.city}</td>
-                        <td>{client.primaryContactPerson}</td>
-                        <td>{client.primaryNumber}</td>
-                        <td>{client.email}</td>
-                        <td>{client.gstNumber}</td>
-                        <td>{client.clientCategory}</td>
-                        <td>
-                          <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-100">
-                            <img 
-                              src={client.clientLogo} 
-                              alt={`${client.clientName} logo`} 
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        </td>
-                        <td className="text-right">
-                          <div className="flex justify-end items-center space-x-2">
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => handleEditClient(client)}
-                              disabled={user?.role === 'client' && client.id !== 1} // For demo, clients can only edit their own
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            
-                            {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'distributor') && (
+            {loading ? (
+              <div className="flex justify-center items-center py-10">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-coolant-400"></div>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Client Name</th>
+                      <th>City</th>
+                      <th>Primary Contact</th>
+                      <th>Primary Number</th>
+                      <th>Email</th>
+                      <th>GST Number</th>
+                      <th>Client Category</th>
+                      <th>Logo</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredClients.length > 0 ? (
+                      filteredClients.map((client) => (
+                        <tr key={client.id}>
+                          <td className="font-medium">{client.client_name}</td>
+                          <td>{client.city}</td>
+                          <td>{client.primary_contact_person}</td>
+                          <td>{client.primary_number}</td>
+                          <td>{client.email}</td>
+                          <td>{client.gst_number}</td>
+                          <td>{client.client_category}</td>
+                          <td>
+                            <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-100">
+                              <img 
+                                src={client.client_logo || '/placeholder.svg'} 
+                                alt={`${client.client_name} logo`} 
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          </td>
+                          <td className="text-right">
+                            <div className="flex justify-end items-center space-x-2">
                               <Button 
                                 variant="ghost" 
                                 size="icon"
-                                onClick={() => handleDeleteClient(client.id)}
+                                onClick={() => handleEditClient(client)}
+                                disabled={user?.role === 'client' && client.gst_number !== user.companyName}
                               >
-                                <Trash className="h-4 w-4" />
+                                <Edit className="h-4 w-4" />
                               </Button>
-                            )}
-                          </div>
+                              
+                              {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'distributor') && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleDeleteClient(client.id)}
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={9} className="text-center py-4 text-gray-500">
+                          No clients found
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={9} className="text-center py-4 text-gray-500">
-                        No clients found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex justify-between">
             <div className="text-sm text-gray-500">
@@ -405,7 +450,7 @@ const ClientManagement = () => {
             <DialogTitle>{isEditMode ? 'Edit Client' : 'Add New Client'}</DialogTitle>
             <DialogDescription>
               {isEditMode 
-                ? `Update the client information for ${selectedClient?.clientName}.`
+                ? `Update the client information for ${selectedClient?.client_name}.`
                 : 'Fill in the client information below. Required fields are marked with *.'
               }
             </DialogDescription>
@@ -418,8 +463,8 @@ const ClientManagement = () => {
                 <Input 
                   id="client-name" 
                   placeholder="Enter client name"
-                  value={newClient.clientName}
-                  onChange={(e) => setNewClient({...newClient, clientName: e.target.value})}
+                  value={newClient.client_name}
+                  onChange={(e) => setNewClient({...newClient, client_name: e.target.value})}
                   required
                 />
               </div>
@@ -451,8 +496,8 @@ const ClientManagement = () => {
                 <Input 
                   id="primary-contact" 
                   placeholder="Enter primary contact name"
-                  value={newClient.primaryContactPerson}
-                  onChange={(e) => setNewClient({...newClient, primaryContactPerson: e.target.value})}
+                  value={newClient.primary_contact_person}
+                  onChange={(e) => setNewClient({...newClient, primary_contact_person: e.target.value})}
                   required
                 />
               </div>
@@ -467,12 +512,12 @@ const ClientManagement = () => {
                     id="primary-mobile" 
                     className="rounded-l-none"
                     placeholder="10-digit mobile number"
-                    value={newClient.primaryMobileNumber}
+                    value={newClient.primary_mobile_number}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, '').substring(0, 10);
-                      setNewClient({...newClient, primaryMobileNumber: value});
+                      setNewClient({...newClient, primary_mobile_number: value});
                       if (newClient.useAsWhatsapp) {
-                        setNewClient({...newClient, primaryMobileNumber: value, whatsappNumber: value});
+                        setNewClient({...newClient, primary_mobile_number: value, whatsapp_number: value});
                       }
                     }}
                     required
@@ -488,7 +533,7 @@ const ClientManagement = () => {
                   checked={newClient.useAsWhatsapp}
                   onCheckedChange={(checked) => {
                     if (checked === true) {
-                      setNewClient({...newClient, useAsWhatsapp: true, whatsappNumber: newClient.primaryMobileNumber});
+                      setNewClient({...newClient, useAsWhatsapp: true, whatsapp_number: newClient.primary_mobile_number});
                     } else {
                       setNewClient({...newClient, useAsWhatsapp: false});
                     }
@@ -513,10 +558,10 @@ const ClientManagement = () => {
                       id="whatsapp" 
                       className="rounded-l-none"
                       placeholder="10-digit WhatsApp number"
-                      value={newClient.whatsappNumber}
+                      value={newClient.whatsapp_number}
                       onChange={(e) => {
                         const value = e.target.value.replace(/\D/g, '').substring(0, 10);
-                        setNewClient({...newClient, whatsappNumber: value});
+                        setNewClient({...newClient, whatsapp_number: value});
                       }}
                       required
                       type="tel"
@@ -531,8 +576,8 @@ const ClientManagement = () => {
                 <Input 
                   id="secondary-contact" 
                   placeholder="Enter secondary contact name (optional)"
-                  value={newClient.secondaryContactPerson}
-                  onChange={(e) => setNewClient({...newClient, secondaryContactPerson: e.target.value})}
+                  value={newClient.secondary_contact_person}
+                  onChange={(e) => setNewClient({...newClient, secondary_contact_person: e.target.value})}
                 />
               </div>
               
@@ -546,10 +591,10 @@ const ClientManagement = () => {
                     id="secondary-mobile" 
                     className="rounded-l-none"
                     placeholder="10-digit mobile number (optional)"
-                    value={newClient.secondaryMobileNumber}
+                    value={newClient.secondary_mobile_number}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, '').substring(0, 10);
-                      setNewClient({...newClient, secondaryMobileNumber: value});
+                      setNewClient({...newClient, secondary_mobile_number: value});
                     }}
                     type="tel"
                     pattern="[0-9]{10}"
@@ -574,8 +619,8 @@ const ClientManagement = () => {
                 <Input 
                   id="gst" 
                   placeholder="Enter GST number"
-                  value={newClient.gstNumber}
-                  onChange={(e) => setNewClient({...newClient, gstNumber: e.target.value})}
+                  value={newClient.gst_number}
+                  onChange={(e) => setNewClient({...newClient, gst_number: e.target.value})}
                   required
                 />
               </div>
@@ -583,10 +628,10 @@ const ClientManagement = () => {
               <div className="space-y-2">
                 <Label htmlFor="metals" className="required">Types of Metals</Label>
                 <Select 
-                  value={newClient.typesOfMetals.join(',')}
+                  value={newClient.types_of_metals.join(',')}
                   onValueChange={(value) => {
                     const values = value.split(',').filter(v => v);
-                    setNewClient({...newClient, typesOfMetals: values});
+                    setNewClient({...newClient, types_of_metals: values});
                   }}
                 >
                   <SelectTrigger id="metals">
@@ -600,9 +645,9 @@ const ClientManagement = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                {newClient.typesOfMetals.length > 0 && (
+                {newClient.types_of_metals.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {newClient.typesOfMetals.map((metal) => (
+                    {newClient.types_of_metals.map((metal) => (
                       <span 
                         key={metal}
                         className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-coolant-100 text-coolant-800"
@@ -617,8 +662,8 @@ const ClientManagement = () => {
               <div className="space-y-2">
                 <Label htmlFor="category" className="required">Client Category</Label>
                 <Select 
-                  value={newClient.clientCategory}
-                  onValueChange={(value) => setNewClient({...newClient, clientCategory: value})}
+                  value={newClient.client_category}
+                  onValueChange={(value) => setNewClient({...newClient, client_category: value})}
                 >
                   <SelectTrigger id="category">
                     <SelectValue placeholder="Select category" />
@@ -632,6 +677,27 @@ const ClientManagement = () => {
                   </SelectContent>
                 </Select>
               </div>
+              
+              {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'distributor') && (
+                <div className="space-y-2">
+                  <Label htmlFor="distributor" className="required">Assign Distributor</Label>
+                  <Select 
+                    value={newClient.distributor_id}
+                    onValueChange={(value) => setNewClient({...newClient, distributor_id: value})}
+                  >
+                    <SelectTrigger id="distributor">
+                      <SelectValue placeholder="Select distributor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {distributors.map((distributor) => (
+                        <SelectItem key={distributor.id} value={distributor.id.toString()}>
+                          {distributor.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="logo" className="required">Client Logo</Label>
@@ -650,7 +716,7 @@ const ClientManagement = () => {
                           className="absolute top-1 right-1 bg-white rounded-full h-6 w-6"
                           onClick={() => {
                             setPreviewLogo('');
-                            setNewClient({...newClient, clientLogo: null});
+                            setNewClient({...newClient, client_logo: null});
                           }}
                         >
                           <Trash className="h-3 w-3 text-red-500" />
@@ -698,16 +764,17 @@ const ClientManagement = () => {
             <Button 
               onClick={handleAddClient}
               disabled={
-                !newClient.clientName ||
+                !newClient.client_name ||
                 !newClient.city ||
                 !newClient.address ||
-                !newClient.primaryContactPerson ||
-                !newClient.primaryMobileNumber ||
-                (!newClient.useAsWhatsapp && !newClient.whatsappNumber) ||
+                !newClient.primary_contact_person ||
+                !newClient.primary_mobile_number ||
+                (!newClient.useAsWhatsapp && !newClient.whatsapp_number) ||
                 !newClient.email ||
-                !newClient.gstNumber ||
-                newClient.typesOfMetals.length === 0 ||
-                !newClient.clientCategory ||
+                !newClient.gst_number ||
+                newClient.types_of_metals.length === 0 ||
+                !newClient.client_category ||
+                (user?.role !== 'client' && !newClient.distributor_id) ||
                 (!previewLogo && !isEditMode)
               }
               className="bg-coolant-400 hover:bg-coolant-500"

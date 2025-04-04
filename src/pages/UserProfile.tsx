@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,15 +14,17 @@ import { toast } from 'sonner';
 const UserProfile = () => {
   const { user } = useAuth();
   const [isEditMode, setIsEditMode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [userProfile, setUserProfile] = useState({
-    fullName: user?.fullName || '',
-    designation: user?.designation || '',
+    fullName: '',
+    designation: '',
     phoneNumber: '',
-    email: user?.email || '',
-    company: user?.companyName || '',
-    profileImage: user?.profileImage || '/placeholder.svg'
+    email: '',
+    company: '',
+    profileImage: '/placeholder.svg'
   });
-  const [previewImage, setPreviewImage] = useState(user?.profileImage || '/placeholder.svg');
+  const [previewImage, setPreviewImage] = useState('/placeholder.svg');
   
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -32,6 +34,45 @@ const UserProfile = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
+  // Fetch user profile from API
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+  
+  const fetchUserProfile = async () => {
+    setProfileLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+      
+      const data = await response.json();
+      
+      setUserProfile({
+        fullName: data.fullName || '',
+        designation: data.designation || '',
+        phoneNumber: data.phoneNumber || '',
+        email: data.email || '',
+        company: data.companyName || '',
+        profileImage: data.profileImage || '/placeholder.svg'
+      });
+      
+      setPreviewImage(data.profileImage || '/placeholder.svg');
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to load profile data');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+  
   // Handle edit profile
   const handleEditProfile = () => {
     setIsEditMode(true);
@@ -40,24 +81,50 @@ const UserProfile = () => {
   // Handle cancel edit
   const handleCancelEdit = () => {
     setIsEditMode(false);
-    setUserProfile({
-      fullName: user?.fullName || '',
-      designation: user?.designation || '',
-      phoneNumber: '',
-      email: user?.email || '',
-      company: user?.companyName || '',
-      profileImage: user?.profileImage || '/placeholder.svg'
-    });
-    setPreviewImage(user?.profileImage || '/placeholder.svg');
+    fetchUserProfile();
   };
   
   // Handle save profile
-  const handleSaveProfile = () => {
-    // In a real app, this would make an API call to update the user profile
-    toast.success('Profile updated successfully!', {
-      duration: 3000,
-    });
-    setIsEditMode(false);
+  const handleSaveProfile = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      
+      formData.append('fullName', userProfile.fullName);
+      formData.append('designation', userProfile.designation);
+      formData.append('phoneNumber', userProfile.phoneNumber);
+      formData.append('email', userProfile.email);
+      formData.append('companyName', userProfile.company);
+      
+      // If profile image is File object, add it
+      if (userProfile.profileImage instanceof File) {
+        formData.append('profileImage', userProfile.profileImage);
+      }
+      
+      const response = await fetch('http://localhost:5000/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+      
+      // Refresh profile data
+      await fetchUserProfile();
+      
+      toast.success('Profile updated successfully!');
+      setIsEditMode(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
   };
   
   // Handle profile image change
@@ -85,13 +152,13 @@ const UserProfile = () => {
     const reader = new FileReader();
     reader.onload = () => {
       setPreviewImage(reader.result as string);
-      setUserProfile({...userProfile, profileImage: reader.result as string});
+      setUserProfile({...userProfile, profileImage: file});
     };
     reader.readAsDataURL(file);
   };
   
   // Handle password update
-  const handleUpdatePassword = () => {
+  const handleUpdatePassword = async () => {
     if (newPassword !== confirmPassword) {
       toast.error('New password and confirm password do not match.', {
         duration: 5000,
@@ -106,15 +173,37 @@ const UserProfile = () => {
       return;
     }
     
-    // In a real app, this would make an API call to update the password
-    toast.success('Password updated successfully!', {
-      duration: 3000,
-    });
-    
-    // Reset form
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/change-password', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update password');
+      }
+      
+      toast.success('Password updated successfully!');
+      
+      // Reset form
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      console.error('Error updating password:', error);
+      toast.error('Failed to update password. Please check your current password.');
+    } finally {
+      setLoading(false);
+    }
   };
   
   // Calculate password strength
@@ -154,6 +243,19 @@ const UserProfile = () => {
     { text: 'Contains a special character', met: /[^a-zA-Z0-9]/.test(newPassword) }
   ];
   
+  if (profileLoading) {
+    return (
+      <Layout>
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-coolant-800 mb-6">User Profile</h1>
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-coolant-400"></div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+  
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
@@ -174,7 +276,7 @@ const UserProfile = () => {
                       <div className="w-40 h-40 rounded-full overflow-hidden bg-coolant-100 border-4 border-coolant-200">
                         <img 
                           src={previewImage} 
-                          alt={`${user?.fullName}'s profile`} 
+                          alt={`${userProfile.fullName}'s profile`} 
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -184,17 +286,17 @@ const UserProfile = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <h3 className="text-sm font-medium text-gray-500">Full Name</h3>
-                          <p className="text-lg font-medium">{user?.fullName}</p>
+                          <p className="text-lg font-medium">{userProfile.fullName}</p>
                         </div>
                         
                         <div className="space-y-1">
                           <h3 className="text-sm font-medium text-gray-500">Designation</h3>
-                          <p className="text-lg">{user?.designation || '-'}</p>
+                          <p className="text-lg">{userProfile.designation || '-'}</p>
                         </div>
                         
                         <div className="space-y-1">
                           <h3 className="text-sm font-medium text-gray-500">Email</h3>
-                          <p className="text-lg">{user?.email}</p>
+                          <p className="text-lg">{userProfile.email}</p>
                         </div>
                         
                         <div className="space-y-1">
@@ -209,7 +311,7 @@ const UserProfile = () => {
                         
                         <div className="space-y-1">
                           <h3 className="text-sm font-medium text-gray-500">Company</h3>
-                          <p className="text-lg">{user?.companyName || '-'}</p>
+                          <p className="text-lg">{userProfile.company || '-'}</p>
                         </div>
                       </div>
                       
@@ -311,6 +413,7 @@ const UserProfile = () => {
                       <Button 
                         variant="outline" 
                         onClick={handleCancelEdit}
+                        disabled={loading}
                       >
                         Cancel
                       </Button>
@@ -318,8 +421,9 @@ const UserProfile = () => {
                       <Button 
                         onClick={handleSaveProfile}
                         className="bg-coolant-400 hover:bg-coolant-500"
+                        disabled={loading}
                       >
-                        Save Changes
+                        {loading ? 'Saving...' : 'Save Changes'}
                       </Button>
                     </div>
                   </div>
@@ -462,9 +566,9 @@ const UserProfile = () => {
                   <Button 
                     onClick={handleUpdatePassword}
                     className="w-full bg-coolant-400 hover:bg-coolant-500"
-                    disabled={!currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword || passwordStrength < 50}
+                    disabled={loading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword || passwordStrength < 50}
                   >
-                    Update Password
+                    {loading ? 'Updating...' : 'Update Password'}
                   </Button>
                 </div>
               </CardContent>
