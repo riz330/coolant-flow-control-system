@@ -1,215 +1,184 @@
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
-import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { useAuth } from '@/hooks/useAuth';
-import { Check, Eye, EyeOff, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
+import { Edit, Upload, X, Check } from 'lucide-react';
+
+interface UserProfileData {
+  full_name: string;
+  designation: string;
+  phone_number: string;
+  user_mailid: string;
+  company: string;
+  profile_image: string | null;
+}
 
 const UserProfile = () => {
   const { user } = useAuth();
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [userProfile, setUserProfile] = useState({
-    fullName: '',
-    designation: '',
-    phoneNumber: '',
-    email: '',
-    company: '',
-    profileImage: '/placeholder.svg'
-  });
-  const [previewImage, setPreviewImage] = useState('/placeholder.svg');
+  const [profileData, setProfileData] = useState<UserProfileData | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [formData, setFormData] = useState<UserProfileData | null>(null);
+  const [profileImage, setProfileImage] = useState<File | null>(null);
   
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState(0);
   
-  // Fetch user profile from API
+  const API_BASE_URL = 'http://localhost:5000/api';
+  
   useEffect(() => {
     fetchUserProfile();
-  }, []);
+  }, [user]);
+  
+  useEffect(() => {
+    if (newPassword) {
+      calculatePasswordStrength(newPassword);
+    } else {
+      setPasswordStrength(0);
+    }
+  }, [newPassword]);
   
   const fetchUserProfile = async () => {
-    setProfileLoading(true);
+    setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/profile', {
+      const response = await fetch(`${API_BASE_URL}/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch profile');
+        throw new Error('Failed to fetch profile data');
       }
       
       const data = await response.json();
-      
-      setUserProfile({
-        fullName: data.fullName || '',
-        designation: data.designation || '',
-        phoneNumber: data.phoneNumber || '',
-        email: data.email || '',
-        company: data.companyName || '',
-        profileImage: data.profileImage || '/placeholder.svg'
-      });
-      
-      setPreviewImage(data.profileImage || '/placeholder.svg');
+      setProfileData(data);
+      setFormData(data);
+      setPreviewImage(data.profile_image ? `${API_BASE_URL}${data.profile_image}` : null);
     } catch (error) {
       console.error('Error fetching profile:', error);
       toast.error('Failed to load profile data');
     } finally {
-      setProfileLoading(false);
+      setLoading(false);
     }
   };
   
-  // Handle edit profile
-  const handleEditProfile = () => {
-    setIsEditMode(true);
+  const handleEditToggle = () => {
+    if (editMode) {
+      // Cancel edit mode
+      setFormData(profileData);
+      setPreviewImage(profileData?.profile_image ? `${API_BASE_URL}${profileData.profile_image}` : null);
+      setProfileImage(null);
+    }
+    setEditMode(!editMode);
   };
   
-  // Handle cancel edit
-  const handleCancelEdit = () => {
-    setIsEditMode(false);
-    fetchUserProfile();
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (formData) {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
   };
   
-  // Handle save profile
-  const handleSaveProfile = async () => {
-    setLoading(true);
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.match('image/(jpeg|jpg|png)')) {
+      toast.error('Please upload a JPG or PNG image.');
+      return;
+    }
+    
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should not exceed 2MB.');
+      return;
+    }
+    
+    setProfileImage(file);
+    
+    // Create preview URL
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setPreviewImage(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+  
+  const handleRemoveImage = () => {
+    setPreviewImage(null);
+    setProfileImage(null);
+    
+    if (formData) {
+      setFormData({
+        ...formData,
+        profile_image: null
+      });
+    }
+  };
+  
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData) return;
+    
     try {
       const token = localStorage.getItem('token');
-      const formData = new FormData();
       
-      formData.append('fullName', userProfile.fullName);
-      formData.append('designation', userProfile.designation);
-      formData.append('phoneNumber', userProfile.phoneNumber);
-      formData.append('email', userProfile.email);
-      formData.append('companyName', userProfile.company);
+      const formDataObj = new FormData();
+      formDataObj.append('full_name', formData.full_name);
+      formDataObj.append('designation', formData.designation || '');
+      formDataObj.append('phone_number', formData.phone_number || '');
+      formDataObj.append('user_mailid', formData.user_mailid);
+      formDataObj.append('company', formData.company || '');
       
-      // If profile image is File object, add it
-      if (userProfile.profileImage instanceof File) {
-        formData.append('profileImage', userProfile.profileImage);
+      if (profileImage) {
+        formDataObj.append('profile_image', profileImage);
       }
       
-      const response = await fetch('http://localhost:5000/api/profile', {
+      const response = await fetch(`${API_BASE_URL}/profile/update`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
         },
-        body: formData
+        body: formDataObj
       });
       
       if (!response.ok) {
         throw new Error('Failed to update profile');
       }
       
-      // Refresh profile data
-      await fetchUserProfile();
+      const data = await response.json();
+      setProfileData(data);
+      setEditMode(false);
       
-      toast.success('Profile updated successfully!');
-      setIsEditMode(false);
+      toast.success('Profile updated successfully');
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
-    } finally {
-      setLoading(false);
     }
   };
   
-  // Handle profile image change
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    // Check file type
-    if (!file.type.match('image/(jpeg|jpg|png)')) {
-      toast.error('File type not allowed. Please upload a JPG or PNG image.', {
-        duration: 5000,
-      });
-      return;
-    }
-    
-    // Check file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('File size exceeds 2MB limit.', {
-        duration: 5000,
-      });
-      return;
-    }
-    
-    // Create preview URL
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPreviewImage(reader.result as string);
-      setUserProfile({...userProfile, profileImage: file});
-    };
-    reader.readAsDataURL(file);
-  };
-  
-  // Handle password update
-  const handleUpdatePassword = async () => {
-    if (newPassword !== confirmPassword) {
-      toast.error('New password and confirm password do not match.', {
-        duration: 5000,
-      });
-      return;
-    }
-    
-    if (getPasswordStrength(newPassword) < 50) {
-      toast.error('New password is too weak.', {
-        duration: 5000,
-      });
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/change-password', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update password');
-      }
-      
-      toast.success('Password updated successfully!');
-      
-      // Reset form
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (error) {
-      console.error('Error updating password:', error);
-      toast.error('Failed to update password. Please check your current password.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Calculate password strength
-  const getPasswordStrength = (password: string) => {
-    if (!password) return 0;
-    
+  const calculatePasswordStrength = (password: string) => {
     let strength = 0;
     
     // Length check
@@ -218,38 +187,79 @@ const UserProfile = () => {
     // Contains number
     if (/\d/.test(password)) strength += 25;
     
-    // Contains lowercase letter
+    // Contains lowercase
     if (/[a-z]/.test(password)) strength += 25;
     
-    // Contains uppercase letter or special char
-    if (/[A-Z]/.test(password) || /[^a-zA-Z0-9]/.test(password)) strength += 25;
+    // Contains uppercase or special char
+    if (/[A-Z]/.test(password) || /[^A-Za-z0-9]/.test(password)) strength += 25;
     
-    return strength;
+    setPasswordStrength(strength);
   };
   
-  const passwordStrength = getPasswordStrength(newPassword);
-  
-  const getStrengthText = (strength: number) => {
-    if (strength < 25) return 'Very Weak';
-    if (strength < 50) return 'Weak';
-    if (strength < 75) return 'Medium';
-    return 'Strong';
+  const getStrengthColor = () => {
+    if (passwordStrength < 50) return 'bg-red-500';
+    if (passwordStrength < 75) return 'bg-yellow-500';
+    return 'bg-green-500';
   };
   
-  const passwordRequirements = [
-    { text: 'At least 8 characters', met: newPassword.length >= 8 },
-    { text: 'Contains a number', met: /\d/.test(newPassword) },
-    { text: 'Contains a letter', met: /[a-zA-Z]/.test(newPassword) },
-    { text: 'Contains a special character', met: /[^a-zA-Z0-9]/.test(newPassword) }
-  ];
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate passwords
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    
+    if (passwordStrength < 75) {
+      toast.error('Please use a stronger password');
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${API_BASE_URL}/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to change password');
+      }
+      
+      // Reset form
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordStrength(0);
+      
+      toast.success('Password changed successfully');
+    } catch (error) {
+      console.error('Error changing password:', error);
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error('Failed to change password');
+      }
+    }
+  };
   
-  if (profileLoading) {
+  if (loading) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-coolant-800 mb-6">User Profile</h1>
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-coolant-400"></div>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-coolant-500 mx-auto"></div>
+            <p className="mt-4 text-coolant-600">Loading profile...</p>
           </div>
         </div>
       </Layout>
@@ -258,113 +268,82 @@ const UserProfile = () => {
   
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-coolant-800 mb-6">User Profile</h1>
+      <div className="container mx-auto py-6 max-w-4xl">
+        <h1 className="text-3xl font-bold mb-6">My Profile</h1>
         
-        <Tabs defaultValue="general">
-          <TabsList>
-            <TabsTrigger value="general">General Profile</TabsTrigger>
-            <TabsTrigger value="password">Change Password</TabsTrigger>
+        <Tabs defaultValue="profile">
+          <TabsList className="mb-6">
+            <TabsTrigger value="profile">Profile Information</TabsTrigger>
+            <TabsTrigger value="password">Security & Password</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="general">
+          <TabsContent value="profile">
             <Card>
-              <CardContent className="p-6">
-                {!isEditMode ? (
-                  <div className="flex flex-col md:flex-row gap-8">
-                    <div className="flex-shrink-0">
-                      <div className="w-40 h-40 rounded-full overflow-hidden bg-coolant-100 border-4 border-coolant-200">
-                        <img 
-                          src={previewImage} 
-                          alt={`${userProfile.fullName}'s profile`} 
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
+              <CardHeader>
+                <CardTitle>Profile Details</CardTitle>
+                <CardDescription>
+                  View and manage your personal information
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="flex flex-col items-center justify-start gap-4">
+                    <div className="relative">
+                      <Avatar className="h-40 w-40">
+                        <AvatarImage src={previewImage || '/placeholder.svg'} />
+                        <AvatarFallback>{profileData?.full_name?.substring(0, 2).toUpperCase() || 'U'}</AvatarFallback>
+                      </Avatar>
+                      
+                      {editMode && (
+                        <div className="absolute -bottom-2 -right-2 flex gap-1">
+                          <div className="relative">
+                            <Button 
+                              variant="default" 
+                              size="icon" 
+                              className="rounded-full bg-coolant-500 hover:bg-coolant-600"
+                            >
+                              <Upload className="h-4 w-4" />
+                              <input 
+                                type="file" 
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                                onChange={handleImageChange}
+                                accept="image/jpeg, image/png"
+                              />
+                            </Button>
+                          </div>
+                          
+                          {previewImage && (
+                            <Button 
+                              variant="destructive" 
+                              size="icon" 
+                              className="rounded-full"
+                              onClick={handleRemoveImage}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                     
-                    <div className="flex-grow space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-medium text-gray-500">Full Name</h3>
-                          <p className="text-lg font-medium">{userProfile.fullName}</p>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-medium text-gray-500">Designation</h3>
-                          <p className="text-lg">{userProfile.designation || '-'}</p>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-medium text-gray-500">Email</h3>
-                          <p className="text-lg">{userProfile.email}</p>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-medium text-gray-500">Role</h3>
-                          <p className="text-lg capitalize">{user?.role}</p>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-medium text-gray-500">Phone Number</h3>
-                          <p className="text-lg">{userProfile.phoneNumber || '-'}</p>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-medium text-gray-500">Company</h3>
-                          <p className="text-lg">{userProfile.company || '-'}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="pt-4">
-                        <Button 
-                          onClick={handleEditProfile}
-                          className="bg-coolant-400 hover:bg-coolant-500"
-                        >
-                          Edit Profile
-                        </Button>
-                      </div>
+                    <div className="text-center">
+                      <p className="text-lg font-medium">{profileData?.full_name}</p>
+                      <p className="text-coolant-600 text-sm">{profileData?.role}</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="flex flex-col md:flex-row gap-8">
-                      <div className="flex-shrink-0">
-                        <div className="relative w-40 h-40 rounded-full overflow-hidden bg-coolant-100 border-4 border-coolant-200">
-                          <img 
-                            src={previewImage} 
-                            alt="Profile preview" 
-                            className="w-full h-full object-cover"
-                          />
-                          
-                          <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                            <label 
-                              htmlFor="profile-image-upload"
-                              className="cursor-pointer bg-white rounded-full p-2"
-                            >
-                              <Upload className="h-5 w-5 text-coolant-600" />
-                              <input
-                                id="profile-image-upload"
-                                type="file"
-                                accept="image/jpeg,image/png"
-                                onChange={handleImageChange}
-                                className="sr-only"
-                              />
-                            </label>
-                          </div>
-                        </div>
-                        <p className="text-xs text-gray-500 text-center mt-2">
-                          Click to change image
-                        </p>
-                      </div>
-                      
-                      <div className="flex-grow space-y-4">
+                  
+                  <div className="md:col-span-2">
+                    {editMode ? (
+                      <form onSubmit={handleProfileUpdate} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label htmlFor="full-name">Full Name</Label>
+                            <Label htmlFor="full_name">Full Name</Label>
                             <Input 
-                              id="full-name" 
-                              value={userProfile.fullName}
-                              onChange={(e) => setUserProfile({...userProfile, fullName: e.target.value})}
+                              id="full_name" 
+                              name="full_name" 
+                              value={formData?.full_name || ''} 
+                              onChange={handleInputChange}
+                              required
                             />
                           </div>
                           
@@ -372,28 +351,31 @@ const UserProfile = () => {
                             <Label htmlFor="designation">Designation</Label>
                             <Input 
                               id="designation" 
-                              value={userProfile.designation}
-                              onChange={(e) => setUserProfile({...userProfile, designation: e.target.value})}
+                              name="designation" 
+                              value={formData?.designation || ''} 
+                              onChange={handleInputChange}
                             />
                           </div>
                           
                           <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="user_mailid">Email</Label>
                             <Input 
-                              id="email" 
-                              type="email"
-                              value={userProfile.email}
-                              onChange={(e) => setUserProfile({...userProfile, email: e.target.value})}
+                              id="user_mailid" 
+                              name="user_mailid" 
+                              type="email" 
+                              value={formData?.user_mailid || ''} 
+                              onChange={handleInputChange}
+                              required
                             />
                           </div>
                           
                           <div className="space-y-2">
-                            <Label htmlFor="phone">Phone Number</Label>
+                            <Label htmlFor="phone_number">Phone Number</Label>
                             <Input 
-                              id="phone" 
-                              type="tel"
-                              value={userProfile.phoneNumber}
-                              onChange={(e) => setUserProfile({...userProfile, phoneNumber: e.target.value})}
+                              id="phone_number" 
+                              name="phone_number" 
+                              value={formData?.phone_number || ''} 
+                              onChange={handleInputChange}
                             />
                           </div>
                           
@@ -401,176 +383,135 @@ const UserProfile = () => {
                             <Label htmlFor="company">Company</Label>
                             <Input 
                               id="company" 
-                              value={userProfile.company}
-                              onChange={(e) => setUserProfile({...userProfile, company: e.target.value})}
+                              name="company" 
+                              value={formData?.company || ''} 
+                              onChange={handleInputChange}
                             />
                           </div>
                         </div>
+                        
+                        <div className="flex justify-end gap-2 pt-4">
+                          <Button variant="outline" type="button" onClick={handleEditToggle}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" className="bg-coolant-500 hover:bg-coolant-600">
+                            Save Changes
+                          </Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-coolant-600">Full Name</p>
+                            <p className="font-medium">{profileData?.full_name}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-coolant-600">Designation</p>
+                            <p className="font-medium">{profileData?.designation || '-'}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-coolant-600">Email</p>
+                            <p className="font-medium">{profileData?.user_mailid}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-coolant-600">Phone Number</p>
+                            <p className="font-medium">{profileData?.phone_number || '-'}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-coolant-600">Company</p>
+                            <p className="font-medium">{profileData?.company || '-'}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-coolant-600">Role</p>
+                            <p className="font-medium capitalize">{profileData?.role}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-end pt-4">
+                          <Button onClick={handleEditToggle} className="bg-coolant-500 hover:bg-coolant-600">
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Profile
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="flex justify-end space-x-4 pt-4">
-                      <Button 
-                        variant="outline" 
-                        onClick={handleCancelEdit}
-                        disabled={loading}
-                      >
-                        Cancel
-                      </Button>
-                      
-                      <Button 
-                        onClick={handleSaveProfile}
-                        className="bg-coolant-400 hover:bg-coolant-500"
-                        disabled={loading}
-                      >
-                        {loading ? 'Saving...' : 'Save Changes'}
-                      </Button>
-                    </div>
+                    )}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
           
           <TabsContent value="password">
             <Card>
-              <CardContent className="p-6">
-                <div className="max-w-md mx-auto space-y-6">
+              <CardHeader>
+                <CardTitle>Change Password</CardTitle>
+                <CardDescription>
+                  Update your password. For security, you'll need to enter your current password.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
                   <div className="space-y-2">
                     <Label htmlFor="current-password">Current Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="current-password"
-                        type={showCurrentPassword ? "text" : "password"}
-                        placeholder="Enter your current password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        required
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
-                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      >
-                        {showCurrentPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
+                    <Input 
+                      id="current-password" 
+                      type="password" 
+                      value={currentPassword} 
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                    />
                   </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="new-password">New Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="new-password"
-                        type={showNewPassword ? "text" : "password"}
-                        placeholder="Enter your new password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        required
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
-                        onClick={() => setShowNewPassword(!showNewPassword)}
-                      >
-                        {showNewPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    
+                    <Input 
+                      id="new-password" 
+                      type="password" 
+                      value={newPassword} 
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
                     {newPassword && (
-                      <div className="mt-2 space-y-2">
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-coolant-600">Password strength</span>
-                            <span className={`font-medium ${
-                              passwordStrength < 50 ? 'text-red-500' : 
-                              passwordStrength < 75 ? 'text-yellow-500' : 
-                              'text-green-500'
-                            }`}>
-                              {getStrengthText(passwordStrength)}
-                            </span>
-                          </div>
-                          <Progress 
-                            value={passwordStrength} 
-                            className="h-1 w-full bg-gray-200" 
-                          />
+                      <div className="mt-2">
+                        <div className="flex justify-between mb-1 text-xs">
+                          <span>Strength:</span>
+                          <span>
+                            {passwordStrength < 50 ? 'Weak' : 
+                             passwordStrength < 75 ? 'Medium' : 'Strong'}
+                          </span>
                         </div>
-                        
-                        <ul className="space-y-1">
-                          {passwordRequirements.map((req, i) => (
-                            <li key={i} className="flex items-center text-xs">
-                              {req.met ? (
-                                <Check className="h-3 w-3 mr-2 text-green-500" />
-                              ) : (
-                                <X className="h-3 w-3 mr-2 text-red-500" />
-                              )}
-                              <span className={req.met ? 'text-green-600' : 'text-gray-500'}>
-                                {req.text}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
+                        <Progress value={passwordStrength} className={getStrengthColor()} />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Password should be at least 8 characters with 1 number and 1 special character.
+                        </p>
                       </div>
                     )}
                   </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="confirm-password">Confirm New Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="confirm-password"
-                        type={showConfirmPassword ? "text" : "password"}
-                        placeholder="Confirm your new password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    
-                    {newPassword && confirmPassword && (
-                      <div className="mt-1 flex items-center text-xs">
-                        {newPassword === confirmPassword ? (
-                          <>
-                            <Check className="h-3 w-3 mr-2 text-green-500" />
-                            <span className="text-green-600">Passwords match</span>
-                          </>
-                        ) : (
-                          <>
-                            <X className="h-3 w-3 mr-2 text-red-500" />
-                            <span className="text-red-500">Passwords don't match</span>
-                          </>
-                        )}
-                      </div>
+                    <Input 
+                      id="confirm-password" 
+                      type="password" 
+                      value={confirmPassword} 
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                    />
+                    {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                      <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
                     )}
                   </div>
                   
-                  <Button 
-                    onClick={handleUpdatePassword}
-                    className="w-full bg-coolant-400 hover:bg-coolant-500"
-                    disabled={loading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword || passwordStrength < 50}
-                  >
-                    {loading ? 'Updating...' : 'Update Password'}
+                  <Button type="submit" className="bg-coolant-500 hover:bg-coolant-600 mt-4">
+                    Change Password
                   </Button>
-                </div>
+                </form>
               </CardContent>
             </Card>
           </TabsContent>
