@@ -1,523 +1,520 @@
 
-import React, { useState, useEffect } from 'react';
-import Layout from '@/components/layout/Layout';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Progress } from '@/components/ui/progress';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
-import { Edit, Upload, X, Check } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useState, useEffect } from "react";
 
 interface UserProfileData {
-  full_name: string;
+  user_id: number;
+  username: string;
+  fullname: string;
+  email: string;
   designation: string;
-  phone_number: string;
-  user_mailid: string;
   company: string;
+  mobile_number: string;
   profile_image: string | null;
+  role: string;
 }
 
 const UserProfile = () => {
   const { user } = useAuth();
   const [profileData, setProfileData] = useState<UserProfileData | null>(null);
-  const [editMode, setEditMode] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [formData, setFormData] = useState<UserProfileData | null>(null);
-  const [profileImage, setProfileImage] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   
-  // Password change state
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordStrength, setPasswordStrength] = useState(0);
+  // Password change form state
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
   
-  const API_BASE_URL = 'http://localhost:5000/api';
+  // Profile edit form state
+  const [profileForm, setProfileForm] = useState({
+    fullname: "",
+    username: "",
+    email: "",
+    designation: "",
+    company: "",
+    mobile_number: "",
+    profile_image: null as File | null
+  });
+  
+  // Image preview
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  
+  // Fetch user profile data
+  const fetchProfileData = async () => {
+    if (!user) return;
+    
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/profile/?user_id=${user.user_id}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setProfileData(data.user);
+      } else {
+        toast.error(data.error || "Failed to load profile");
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      toast.error("Failed to load profile data");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   useEffect(() => {
-    fetchUserProfile();
+    if (user) {
+      fetchProfileData();
+    }
   }, [user]);
   
-  useEffect(() => {
-    if (newPassword) {
-      calculatePasswordStrength(newPassword);
-    } else {
-      setPasswordStrength(0);
-    }
-  }, [newPassword]);
-  
-  const fetchUserProfile = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile data');
-      }
-      
-      const data = await response.json();
-      setProfileData(data);
-      setFormData(data);
-      setPreviewImage(data.profile_image ? `${API_BASE_URL}${data.profile_image}` : null);
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      toast.error('Failed to load profile data');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleEditToggle = () => {
-    if (editMode) {
-      // Cancel edit mode
-      setFormData(profileData);
-      setPreviewImage(profileData?.profile_image ? `${API_BASE_URL}${profileData.profile_image}` : null);
-      setProfileImage(null);
-    }
-    setEditMode(!editMode);
-  };
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle password form changes
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    if (formData) {
-      setFormData({
-        ...formData,
-        [name]: value
-      });
-    }
+    setPasswordForm(prev => ({ ...prev, [name]: value }));
   };
   
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    // Validate file type
-    if (!file.type.match('image/(jpeg|jpg|png)')) {
-      toast.error('Please upload a JPG or PNG image.');
-      return;
-    }
-    
-    // Validate file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Image size should not exceed 2MB.');
-      return;
-    }
-    
-    setProfileImage(file);
-    
-    // Create preview URL
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setPreviewImage(reader.result);
+  // Handle profile form changes
+  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setProfileForm(prev => ({ ...prev, [name]: value }));
+  };
+  
+  // Handle file upload
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Check file size (max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error("File size exceeds 2MB limit");
+        return;
       }
-    };
-    reader.readAsDataURL(file);
-  };
-  
-  const handleRemoveImage = () => {
-    setPreviewImage(null);
-    setProfileImage(null);
-    
-    if (formData) {
-      setFormData({
-        ...formData,
-        profile_image: null
-      });
+      
+      // Check file type
+      if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type)) {
+        toast.error("Only PNG, JPG, and JPEG images are allowed");
+        return;
+      }
+      
+      setProfileForm(prev => ({ ...prev, profile_image: file }));
+      
+      // Set preview
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImagePreview(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
   
-  const handleProfileUpdate = async (e: React.FormEvent) => {
+  // Submit password change
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData) return;
-    
-    try {
-      const token = localStorage.getItem('token');
-      
-      const formDataObj = new FormData();
-      formDataObj.append('full_name', formData.full_name);
-      formDataObj.append('designation', formData.designation || '');
-      formDataObj.append('phone_number', formData.phone_number || '');
-      formDataObj.append('user_mailid', formData.user_mailid);
-      formDataObj.append('company', formData.company || '');
-      
-      if (profileImage) {
-        formDataObj.append('profile_image', profileImage);
-      }
-      
-      const response = await fetch(`${API_BASE_URL}/profile/update`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formDataObj
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update profile');
-      }
-      
-      const data = await response.json();
-      setProfileData(data);
-      setEditMode(false);
-      
-      toast.success('Profile updated successfully');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
-    }
-  };
-  
-  const calculatePasswordStrength = (password: string) => {
-    let strength = 0;
-    
-    // Length check
-    if (password.length >= 8) strength += 25;
-    
-    // Contains number
-    if (/\d/.test(password)) strength += 25;
-    
-    // Contains lowercase
-    if (/[a-z]/.test(password)) strength += 25;
-    
-    // Contains uppercase or special char
-    if (/[A-Z]/.test(password) || /[^A-Za-z0-9]/.test(password)) strength += 25;
-    
-    setPasswordStrength(strength);
-  };
-  
-  const getStrengthColor = () => {
-    if (passwordStrength < 50) return 'bg-red-500';
-    if (passwordStrength < 75) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
-  
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (!user) return;
     
     // Validate passwords
-    if (newPassword !== confirmPassword) {
-      toast.error('New passwords do not match');
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("New passwords do not match");
       return;
     }
     
-    if (passwordStrength < 75) {
-      toast.error('Please use a stronger password');
+    if (passwordForm.newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
     
     try {
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(`${API_BASE_URL}/change-password`, {
-        method: 'POST',
+      const response = await fetch("/api/change-password", {
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword
+          user_id: user.user_id,
+          current_password: passwordForm.currentPassword,
+          new_password: passwordForm.newPassword
         })
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to change password');
-      }
+      const data = await response.json();
       
-      // Reset form
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setPasswordStrength(0);
-      
-      toast.success('Password changed successfully');
-    } catch (error) {
-      console.error('Error changing password:', error);
-      if (error instanceof Error) {
-        toast.error(error.message);
+      if (data.success) {
+        toast.success("Password changed successfully");
+        setIsChangePasswordOpen(false);
+        // Reset form
+        setPasswordForm({
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: ""
+        });
       } else {
-        toast.error('Failed to change password');
+        toast.error(data.error || "Failed to change password");
       }
+    } catch (error) {
+      console.error("Error changing password:", error);
+      toast.error("Failed to change password");
     }
   };
   
-  if (loading) {
+  // Open edit profile modal
+  const openEditProfile = () => {
+    if (!profileData) return;
+    
+    setProfileForm({
+      fullname: profileData.fullname || "",
+      username: profileData.username || "",
+      email: profileData.email || "",
+      designation: profileData.designation || "",
+      company: profileData.company || "",
+      mobile_number: profileData.mobile_number || "",
+      profile_image: null
+    });
+    
+    setImagePreview(profileData.profile_image || null);
+    setIsEditProfileOpen(true);
+  };
+  
+  // Submit profile update
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) return;
+    
+    try {
+      // Use FormData to handle file upload
+      const formData = new FormData();
+      formData.append("user_id", user.user_id.toString());
+      formData.append("fullname", profileForm.fullname);
+      formData.append("username", profileForm.username);
+      formData.append("email", profileForm.email);
+      formData.append("designation", profileForm.designation);
+      formData.append("company", profileForm.company);
+      formData.append("mobile_number", profileForm.mobile_number);
+      
+      if (profileForm.profile_image) {
+        formData.append("profile_image", profileForm.profile_image);
+      }
+      
+      const response = await fetch("/api/profile/update", {
+        method: "PUT",
+        body: formData
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success("Profile updated successfully");
+        setIsEditProfileOpen(false);
+        setProfileData(data.user);
+      } else {
+        toast.error(data.error || "Failed to update profile");
+      }
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
+    }
+  };
+  
+  if (isLoading) {
     return (
-      <Layout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-coolant-500 mx-auto"></div>
-            <p className="mt-4 text-coolant-600">Loading profile...</p>
-          </div>
-        </div>
-      </Layout>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-pulse">Loading profile...</div>
+      </div>
     );
   }
   
   return (
-    <Layout>
-      <div className="container mx-auto py-6 max-w-4xl">
-        <h1 className="text-3xl font-bold mb-6">My Profile</h1>
-        
-        <Tabs defaultValue="profile">
-          <TabsList className="mb-6">
-            <TabsTrigger value="profile">Profile Information</TabsTrigger>
-            <TabsTrigger value="password">Security & Password</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="profile">
-            <Card>
-              <CardHeader>
-                <CardTitle>Profile Details</CardTitle>
-                <CardDescription>
-                  View and manage your personal information
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="flex flex-col items-center justify-start gap-4">
-                    <div className="relative">
-                      <Avatar className="h-40 w-40">
-                        <AvatarImage src={previewImage || '/placeholder.svg'} />
-                        <AvatarFallback>{profileData?.full_name?.substring(0, 2).toUpperCase() || 'U'}</AvatarFallback>
-                      </Avatar>
-                      
-                      {editMode && (
-                        <div className="absolute -bottom-2 -right-2 flex gap-1">
-                          <div className="relative">
-                            <Button 
-                              variant="default" 
-                              size="icon" 
-                              className="rounded-full bg-coolant-500 hover:bg-coolant-600"
-                            >
-                              <Upload className="h-4 w-4" />
-                              <input 
-                                type="file" 
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
-                                onChange={handleImageChange}
-                                accept="image/jpeg, image/png"
-                              />
-                            </Button>
-                          </div>
-                          
-                          {previewImage && (
-                            <Button 
-                              variant="destructive" 
-                              size="icon" 
-                              className="rounded-full"
-                              onClick={handleRemoveImage}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="text-center">
-                      <p className="text-lg font-medium">{profileData?.full_name}</p>
-                      <p className="text-coolant-600 text-sm">{profileData?.role}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    {editMode ? (
-                      <form onSubmit={handleProfileUpdate} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="full_name">Full Name</Label>
-                            <Input 
-                              id="full_name" 
-                              name="full_name" 
-                              value={formData?.full_name || ''} 
-                              onChange={handleInputChange}
-                              required
-                            />
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <Label htmlFor="designation">Designation</Label>
-                            <Input 
-                              id="designation" 
-                              name="designation" 
-                              value={formData?.designation || ''} 
-                              onChange={handleInputChange}
-                            />
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <Label htmlFor="user_mailid">Email</Label>
-                            <Input 
-                              id="user_mailid" 
-                              name="user_mailid" 
-                              type="email" 
-                              value={formData?.user_mailid || ''} 
-                              onChange={handleInputChange}
-                              required
-                            />
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <Label htmlFor="phone_number">Phone Number</Label>
-                            <Input 
-                              id="phone_number" 
-                              name="phone_number" 
-                              value={formData?.phone_number || ''} 
-                              onChange={handleInputChange}
-                            />
-                          </div>
-                          
-                          <div className="space-y-2 md:col-span-2">
-                            <Label htmlFor="company">Company</Label>
-                            <Input 
-                              id="company" 
-                              name="company" 
-                              value={formData?.company || ''} 
-                              onChange={handleInputChange}
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="flex justify-end gap-2 pt-4">
-                          <Button variant="outline" type="button" onClick={handleEditToggle}>
-                            Cancel
-                          </Button>
-                          <Button type="submit" className="bg-coolant-500 hover:bg-coolant-600">
-                            Save Changes
-                          </Button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-sm text-coolant-600">Full Name</p>
-                            <p className="font-medium">{profileData?.full_name}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-coolant-600">Designation</p>
-                            <p className="font-medium">{profileData?.designation || '-'}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-coolant-600">Email</p>
-                            <p className="font-medium">{profileData?.user_mailid}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-coolant-600">Phone Number</p>
-                            <p className="font-medium">{profileData?.phone_number || '-'}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-coolant-600">Company</p>
-                            <p className="font-medium">{profileData?.company || '-'}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-coolant-600">Role</p>
-                            <p className="font-medium capitalize">{profileData?.role}</p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex justify-end pt-4">
-                          <Button onClick={handleEditToggle} className="bg-coolant-500 hover:bg-coolant-600">
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit Profile
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+    <div className="container mx-auto p-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Profile Image Card */}
+        <Card className="md:col-span-1">
+          <CardHeader>
+            <CardTitle>Profile</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center">
+            <div className="w-40 h-40 rounded-full overflow-hidden mb-4 bg-gray-100 flex items-center justify-center">
+              {profileData?.profile_image ? (
+                <img
+                  src={profileData.profile_image}
+                  alt={profileData.fullname}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-4xl text-gray-400">
+                  {profileData?.fullname.charAt(0).toUpperCase() || "U"}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="password">
-            <Card>
-              <CardHeader>
-                <CardTitle>Change Password</CardTitle>
-                <CardDescription>
-                  Update your password. For security, you'll need to enter your current password.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
-                  <div className="space-y-2">
-                    <Label htmlFor="current-password">Current Password</Label>
-                    <Input 
-                      id="current-password" 
-                      type="password" 
-                      value={currentPassword} 
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="new-password">New Password</Label>
-                    <Input 
-                      id="new-password" 
-                      type="password" 
-                      value={newPassword} 
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      required
-                    />
-                    {newPassword && (
-                      <div className="mt-2">
-                        <div className="flex justify-between mb-1 text-xs">
-                          <span>Strength:</span>
-                          <span>
-                            {passwordStrength < 50 ? 'Weak' : 
-                             passwordStrength < 75 ? 'Medium' : 'Strong'}
-                          </span>
-                        </div>
-                        <Progress value={passwordStrength} className={getStrengthColor()} />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Password should be at least 8 characters with 1 number and 1 special character.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm New Password</Label>
-                    <Input 
-                      id="confirm-password" 
-                      type="password" 
-                      value={confirmPassword} 
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-                    {newPassword && confirmPassword && newPassword !== confirmPassword && (
-                      <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
-                    )}
-                  </div>
-                  
-                  <Button type="submit" className="bg-coolant-500 hover:bg-coolant-600 mt-4">
-                    Change Password
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              )}
+            </div>
+            <h2 className="text-xl font-semibold">{profileData?.fullname}</h2>
+            <p className="text-sm text-gray-600">{profileData?.designation}</p>
+            <p className="text-sm text-gray-600 mb-4">{profileData?.role}</p>
+            
+            <div className="flex flex-col w-full gap-2">
+              <Button onClick={openEditProfile} variant="outline" className="w-full">
+                Edit Profile
+              </Button>
+              <Button
+                onClick={() => setIsChangePasswordOpen(true)}
+                variant="outline"
+                className="w-full"
+              >
+                Change Password
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Profile Details Card */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Profile Details</CardTitle>
+            <CardDescription>Your personal and contact information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <h3 className="text-sm font-medium mb-2">Account Information</h3>
+              <Separator className="mb-4" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-gray-500">Full Name</Label>
+                  <p>{profileData?.fullname}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Username</Label>
+                  <p>{profileData?.username}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Email</Label>
+                  <p>{profileData?.email}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Role</Label>
+                  <p>{profileData?.role}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h3 className="text-sm font-medium mb-2">Work Information</h3>
+              <Separator className="mb-4" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-gray-500">Designation</Label>
+                  <p>{profileData?.designation || "Not specified"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Company</Label>
+                  <p>{profileData?.company || "Not specified"}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h3 className="text-sm font-medium mb-2">Contact Information</h3>
+              <Separator className="mb-4" />
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <Label className="text-xs text-gray-500">Mobile Number</Label>
+                  <p>{profileData?.mobile_number || "Not specified"}</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    </Layout>
+      
+      {/* Change Password Dialog */}
+      <Dialog open={isChangePasswordOpen} onOpenChange={setIsChangePasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Enter your current password and a new password below.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <Input
+                id="currentPassword"
+                name="currentPassword"
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={handlePasswordChange}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                name="newPassword"
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={handlePasswordChange}
+                required
+                minLength={6}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={handlePasswordChange}
+                required
+                minLength={6}
+              />
+            </div>
+            
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline" type="button">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit">Change Password</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Profile Dialog */}
+      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            <DialogDescription>
+              Update your profile information.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleProfileSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="fullname">Full Name</Label>
+              <Input
+                id="fullname"
+                name="fullname"
+                value={profileForm.fullname}
+                onChange={handleProfileChange}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                name="username"
+                value={profileForm.username}
+                onChange={handleProfileChange}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={profileForm.email}
+                onChange={handleProfileChange}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="designation">Designation</Label>
+              <Input
+                id="designation"
+                name="designation"
+                value={profileForm.designation}
+                onChange={handleProfileChange}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="company">Company</Label>
+              <Input
+                id="company"
+                name="company"
+                value={profileForm.company}
+                onChange={handleProfileChange}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="mobile_number">Mobile Number</Label>
+              <Input
+                id="mobile_number"
+                name="mobile_number"
+                value={profileForm.mobile_number}
+                onChange={handleProfileChange}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="profile_image">Profile Image (Max 2MB, PNG/JPG)</Label>
+              <Input
+                id="profile_image"
+                name="profile_image"
+                type="file"
+                accept=".png,.jpg,.jpeg"
+                onChange={handleFileChange}
+              />
+              
+              {/* Image Preview */}
+              {imagePreview && (
+                <div className="mt-2">
+                  <p className="text-sm text-gray-500 mb-1">Image Preview:</p>
+                  <img
+                    src={imagePreview}
+                    alt="Profile Preview"
+                    className="w-24 h-24 object-cover rounded-full border border-gray-200"
+                  />
+                </div>
+              )}
+            </div>
+            
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline" type="button">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit">Save Changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
