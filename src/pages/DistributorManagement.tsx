@@ -335,7 +335,7 @@ const DistributorManagement: React.FC = () => {
     
     // Add created_by if adding new distributor
     if (!selectedDistributor && user) {
-      formPayload.append('created_by', user.user_id.toString());
+      formPayload.append('created_by', user.id.toString());
     }
     
     try {
@@ -541,32 +541,37 @@ const DistributorManagement: React.FC = () => {
             <Pagination className="mt-4">
               <PaginationContent>
                 <PaginationItem>
-                  <PaginationLink 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                     disabled={currentPage === 1}
                   >
                     Previous
-                  </PaginationLink>
+                  </Button>
                 </PaginationItem>
                 
                 {Array.from({ length: totalPages }).map((_, index) => (
                   <PaginationItem key={index}>
-                    <PaginationLink
+                    <Button
+                      variant={currentPage === index + 1 ? "default" : "outline"}
+                      size="sm"
                       onClick={() => setCurrentPage(index + 1)}
-                      isActive={currentPage === index + 1}
                     >
                       {index + 1}
-                    </PaginationLink>
+                    </Button>
                   </PaginationItem>
                 ))}
                 
                 <PaginationItem>
-                  <PaginationLink 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                     disabled={currentPage === totalPages}
                   >
                     Next
-                  </PaginationLink>
+                  </Button>
                 </PaginationItem>
               </PaginationContent>
             </Pagination>
@@ -765,7 +770,6 @@ const DistributorManagement: React.FC = () => {
                 <Select 
                   value={formData.distributor_category}
                   onValueChange={(value) => handleSelectChange('distributor_category', value)}
-                  required
                 >
                   <SelectTrigger id="distributor_category">
                     <SelectValue placeholder="Select category" />
