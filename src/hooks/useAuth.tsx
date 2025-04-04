@@ -31,20 +31,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  // API base URL
+  const API_BASE_URL = 'http://localhost:5000/api';
+
   // Check if there's a stored token on initial load
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          // In a real app, you would validate this token with your server
-          // For now, we'll just parse the stored user data
-          const userData = localStorage.getItem('user');
-          if (userData) {
-            setUser(JSON.parse(userData));
+          // Fetch user profile from the API
+          const response = await fetch(`${API_BASE_URL}/profile`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            setUser(userData);
           } else {
-            // If we have a token but no user data, something's wrong - log out
+            // If token is invalid, log out
             localStorage.removeItem('token');
+            localStorage.removeItem('user');
           }
         } catch (error) {
           console.error('Auth error:', error);
@@ -58,50 +67,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
-  // For the demo, we're mocking the API calls
-  // In a real application, these would make actual API requests to your Flask backend
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      // Mock response - in a real app, this would be an API call
-      // Simulating different users based on email prefix
-      const emailPrefix = email.split('@')[0];
-      let role: UserRole = 'employee'; // Default role
+      // Make API request to login endpoint
+      const response = await fetch(`${API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
+      });
       
-      if (emailPrefix.includes('admin')) {
-        role = 'admin';
-      } else if (emailPrefix.includes('manufacturer')) {
-        role = 'manufacturer';
-      } else if (emailPrefix.includes('manager')) {
-        role = 'manager';
-      } else if (emailPrefix.includes('distributor')) {
-        role = 'distributor';
-      } else if (emailPrefix.includes('client')) {
-        role = 'client';
+      if (!response.ok) {
+        throw new Error('Login failed');
       }
       
-      const mockUser: User = {
-        id: 1,
-        fullName: emailPrefix.split('.').map(part => 
-          part.charAt(0).toUpperCase() + part.slice(1)
-        ).join(' '),
-        email,
-        role,
-        designation: 'Sample Designation',
-        companyName: 'Coolant Systems Inc.',
-      };
-      
-      // Mock token - in a real app, this would come from your server
-      const mockToken = `mock-jwt-token-${Date.now()}`;
+      const data = await response.json();
       
       // Store the token and user data
-      localStorage.setItem('token', mockToken);
-      localStorage.setItem('user', JSON.stringify(mockUser));
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
       
-      setUser(mockUser);
+      setUser(data.user);
       
       // Show welcome toast
-      toast.success(`Welcome ${mockUser.fullName}!`, {
+      toast.success(`Welcome ${data.user.fullName}!`, {
         duration: 3000,
         position: 'top-center',
       });
@@ -130,12 +121,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const forgotPassword = async (email: string) => {
     setLoading(true);
     try {
-      // In a real app, this would make an API call to send a reset email
-      // For now, we'll just simulate success
+      // Make API request to forgot-password endpoint
+      const response = await fetch(`${API_BASE_URL}/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to send reset email');
+      }
+      
+      const data = await response.json();
       
       toast.success(`Password reset link sent to ${email}`, {
         duration: 5000,
       });
+      
+      // For development, show the reset link in console
+      console.log('Reset link:', data.reset_link);
     } catch (error) {
       console.error('Forgot password error:', error);
       toast.error('Failed to send reset email. Please try again.', {
@@ -149,8 +155,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resetPassword = async (token: string, newPassword: string) => {
     setLoading(true);
     try {
-      // In a real app, this would make an API call to reset the password
-      // For now, we'll just simulate success
+      // Make API request to reset-password endpoint
+      const response = await fetch(`${API_BASE_URL}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ token, password: newPassword })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to reset password');
+      }
       
       toast.success('Password has been reset successfully. Please log in.', {
         duration: 5000,

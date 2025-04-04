@@ -1,161 +1,102 @@
 
-# Coolant Management System - Run Commands
+# Running the Coolant Management System
 
-This document provides the commands needed to run the Coolant Management System locally for development purposes.
+This guide provides step-by-step instructions for setting up and running the Coolant Management System on your local machine.
 
 ## Prerequisites
 
-Before running the application, ensure you have:
+- Visual Studio Code (VS Code)
+- Node.js and npm 
+- Python 3.x
+- PostgreSQL (installed and running)
 
-- Python 3.8+
-- Node.js 14+ and npm
-- PostgreSQL 12+
+## Part 1: Database Setup
 
-## Backend Setup and Run Commands
+1. Ensure PostgreSQL is installed and running on your machine.
+2. Create a new database named `coolant_management`:
 
-### 1. Set Up the Database
-
-```bash
-# Log in to PostgreSQL
-psql -U postgres
-
-# Create a new database
+```sql
 CREATE DATABASE coolant_management;
-
-# Create a new user (optional)
-CREATE USER coolant_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE coolant_management TO coolant_user;
-
-# Exit PostgreSQL
-\q
 ```
 
-### 2. Configure the Backend
+3. Apply the DDL scripts in this order:
+   - Run `backend/sql/ddl/01_create_tables.sql`
+   - Run `backend/sql/ddl/02_constraints.sql` (if exists)
+   - Run sample data scripts (optional)
+
+You can run these scripts using PostgreSQL's command-line tool `psql`, pgAdmin, or any other PostgreSQL client.
+
+## Part 2: Backend Setup
+
+1. Open the project folder in VS Code.
+2. Navigate to the `backend` directory.
+3. Create a virtual environment (optional but recommended):
 
 ```bash
-# Navigate to the backend directory
-cd backend
-
-# Create a virtual environment
+# On Windows
 python -m venv venv
-
-# Activate the virtual environment
-# Windows:
 venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
 
-# Install dependencies
+# On macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
+```
+
+4. Install the required dependencies:
+
+```bash
 pip install -r requirements.txt
-
-# Update database configuration in db_config.py with your credentials
 ```
 
-### 3. Initialize the Database with Sample Data
+5. Update database connection settings:
+   - Open `backend/db_config.py`
+   - Modify the database connection parameters (host, database, user, password, port) to match your PostgreSQL setup
+
+6. Start the Flask backend server:
 
 ```bash
-# Run DDL scripts
-psql -U coolant_user -d coolant_management -a -f sql/ddl/01_create_tables.sql
-psql -U coolant_user -d coolant_management -a -f sql/ddl/02_constraints.sql
-
-# Load sample data
-psql -U coolant_user -d coolant_management -a -f sql/sample_data.sql
-```
-
-### 4. Run the Flask Development Server
-
-```bash
-# Make sure your virtual environment is activated
-# Windows:
-venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
-
-# Run the development server
 python run.py
 ```
 
-The backend API should now be running at: http://localhost:5000/api/
+The backend server should start running on http://localhost:5000
 
-## Frontend Setup and Run Commands
+## Part 3: Frontend Setup
 
-### 1. Install Dependencies
+1. Open a new terminal in VS Code.
+2. Navigate to the project's root directory.
+3. Install the required dependencies:
 
 ```bash
-# Navigate to the project root
-cd ../
-
-# Install dependencies
 npm install
 ```
 
-### 2. Run the Development Server
+4. Start the React development server:
 
 ```bash
-# Start the development server
 npm run dev
 ```
 
-The frontend should now be running at: http://localhost:8080
+The frontend should start running on http://localhost:5173
 
-### 3. Build for Production
+## Part 4: Using the Application
 
-```bash
-# Create a production build
-npm run build
-```
-
-This will create a production-ready build in the `dist` directory.
-
-## Testing with Sample Accounts
-
-You can log in to the application using the following sample accounts:
-
-| Email                  | Password    | Role          |
-|------------------------|-------------|---------------|
-| admin@example.com      | password123 | Admin         |
-| manager@example.com    | password123 | Manager       |
-| distributor@example.com| password123 | Distributor   |
-| employee@example.com   | password123 | Employee      |
-| client@example.com     | password123 | Client        |
-| manufacturer@example.com| password123| Manufacturer  |
+1. Open your browser and navigate to http://localhost:5173/login
+2. Log in using credentials from your database (stored in the `user_details` table)
+3. The system will authenticate and redirect you to the dashboard according to your user role
 
 ## Troubleshooting
 
-### Backend Issues
+### Backend Issues:
+- Make sure PostgreSQL is running and accessible
+- Verify that database connection parameters in `db_config.py` are correct
+- Check Flask server logs for errors
 
-```bash
-# Check Flask error logs
-cat backend/logs/error.log
+### Frontend Issues:
+- Make sure the backend server is running before using the frontend
+- Check browser console for any errors
+- Verify that API calls are going to the correct endpoint (http://localhost:5000/api)
 
-# Verify database connection
-python -c "from app.utils.db import get_connection; conn = get_connection(); print('Connected successfully' if conn else 'Connection failed')"
-```
-
-### Frontend Issues
-
-```bash
-# Clear npm cache
-npm cache clean --force
-
-# Reinstall dependencies
-rm -rf node_modules
-npm install
-```
-
-## Additional Development Commands
-
-```bash
-# Run backend tests
-cd backend
-pytest
-
-# Lint backend code
-flake8 app
-
-# Lint frontend code
-npm run lint
-
-# Run frontend tests
-npm test
-```
+### Authentication Issues:
+- Ensure the users exist in the `user_details` table
+- Verify that passwords in the database match what you're entering
+- Check that JWT configuration is correct in the Flask app

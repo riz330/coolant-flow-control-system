@@ -101,9 +101,7 @@ const Login = () => {
             </div>
             
             <div className="text-center text-sm text-gray-500">
-              Demo accounts:<br/>
-              Try using <span className="font-medium">admin@example.com</span>, <span className="font-medium">manager@example.com</span>,<br/> <span className="font-medium">distributor@example.com</span>, <span className="font-medium">employee@example.com</span>,<br/> <span className="font-medium">client@example.com</span> or <span className="font-medium">manufacturer@example.com</span><br/>
-              with password: <span className="font-medium">password123</span>
+              Note: Please use the username and password from your PostgreSQL database.
             </div>
           </CardFooter>
         </Card>
