@@ -15,7 +15,9 @@ def create_app():
     
     app = Flask(__name__, static_folder='../static')
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-    CORS(app)
+    
+    # Configure CORS to allow all origins and methods
+    CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}})
     
     # Register blueprints
     app.register_blueprint(auth_bp)
@@ -29,4 +31,3 @@ def create_app():
         return 'Coolant Flow Control System API'
     
     return app
-
