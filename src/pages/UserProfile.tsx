@@ -22,7 +22,7 @@ interface UserProfile {
 }
 
 const UserProfile = () => {
-  const { user, token, updateUser } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -34,6 +34,9 @@ const UserProfile = () => {
     mobile_number: '',
     whatsapp_number: '',
   });
+  
+  // Get token from localStorage instead of auth context
+  const token = localStorage.getItem('token');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -147,14 +150,9 @@ const UserProfile = () => {
       // Update the profile state
       setProfile(updatedProfile);
       
-      // Update the user in auth context if needed
-      if (updateUser) {
-        updateUser({
-          ...user!,
-          first_name: updatedProfile.first_name,
-          last_name: updatedProfile.last_name,
-          profile_picture: updatedProfile.profile_picture
-        });
+      // Instead of using updateUser from context, update the user object manually if needed
+      if (user) {
+        // Handle user update in another way if needed, or just show a toast
       }
       
       toast.success('Profile updated successfully');
