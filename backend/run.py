@@ -8,7 +8,14 @@ from functools import wraps
 from werkzeug.security import check_password_hash
 import os
 import re
-from db_config import DB_CONFIG
+# from db_config import DB_CONFIG
+# from db_config import get_db_connection
+from db_config import get_db_connection
+
+conn = get_db_connection()
+
+
+
 import uuid
 from werkzeug.utils import secure_filename
 
@@ -33,17 +40,17 @@ for folder in [UPLOAD_FOLDER, CLIENT_LOGO_FOLDER, DISTRIBUTOR_LOGO_FOLDER, USER_
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 # Connect to the database
-def get_db_connection():
-    print("DB_CONFIG:", DB_CONFIG)
-    conn = psycopg2.connect(
-        host=DB_CONFIG['host'],
-        database=DB_CONFIG['database'],
-        user=DB_CONFIG['user'],
-        password=DB_CONFIG['password'],
-        port=DB_CONFIG['port']
-    )
-    conn.autocommit = True
-    return conn
+# def get_db_connection():
+#     print("DB_CONFIG:", DB_CONFIG)
+#     conn = psycopg2.connect(
+#         host=DB_CONFIG['host'],
+#         database=DB_CONFIG['database'],
+#         user=DB_CONFIG['user'],
+#         password=DB_CONFIG['password'],
+#         port=DB_CONFIG['port']
+#     )
+#     conn.autocommit = True
+#     return conn
 
 # Check if file extension is allowed
 def allowed_file(filename):

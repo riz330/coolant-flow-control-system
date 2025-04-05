@@ -46,6 +46,7 @@ source venv/bin/activate
 
 ```bash
 pip install -r requirements.txt
+
 ```
 
 5. Update database connection settings:
