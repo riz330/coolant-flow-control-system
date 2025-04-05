@@ -1,684 +1,1006 @@
 
-import { useState, useEffect } from 'react';
-import Layout from '@/components/layout/Layout';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search, Plus, Edit, Trash, Upload } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toast } from 'sonner';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "@/components/ui/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Search, Edit, Trash2, Plus, QrCode } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
-// Define type for distributor data
+// Define the Distributor interface
 interface Distributor {
-  id: number;
+  distributor_id: number;
   distributor_name: string;
   city: string;
   address: string;
   primary_contact_person: string;
   primary_number: string;
-  secondary_contact_person: string;
-  secondary_number: string;
-  email: string;
+  secondary_contact_person: string | null;
+  secondary_number: string | null;
+  email_id: string;
   gst_number: string;
   distributor_category: string;
   whatsapp_number: string;
-  distributor_logo: string;
+  distributor_logo: string | null;
+  created_by: number;
 }
 
-const categoryOptions = [
-  { label: 'Wholesale', value: 'Wholesale' },
-  { label: 'Retail', value: 'Retail' },
-  { label: 'Industrial', value: 'Industrial' },
-  { label: 'Commercial', value: 'Commercial' }
-];
+// Define QR Code Data interface
+interface QRCodeData {
+  id: number;
+  name: string;
+  city: string;
+  email: string;
+  gst: string;
+}
 
-const DistributorManagement = () => {
+// Form schema validation
+const distributorFormSchema = z.object({
+  distributor_name: z.string().min(1, "Distributor name is required"),
+  city: z.string().min(1, "City is required"),
+  address: z.string().min(1, "Address is required"),
+  primary_contact_person: z.string().min(1, "Primary contact person is required"),
+  primary_country_code: z.string().default("+91"),
+  primary_mobile_number: z
+    .string()
+    .min(10, "Mobile number must be 10 digits")
+    .max(10, "Mobile number must be 10 digits")
+    .regex(/^\d+$/, "Mobile number must contain only digits"),
+  secondary_contact_person: z.string().optional(),
+  secondary_country_code: z.string().default("+91"),
+  secondary_mobile_number: z
+    .string()
+    .regex(/^\d*$/, "Mobile number must contain only digits")
+    .max(10, "Mobile number must be 10 digits")
+    .optional(),
+  email_id: z.string().email("Invalid email address"),
+  gst_number: z.string().min(1, "GST number is required"),
+  distributor_category: z.string().min(1, "Category is required"),
+  whatsapp_country_code: z.string().default("+91"),
+  whatsapp_communication_number: z
+    .string()
+    .min(10, "WhatsApp number must be 10 digits")
+    .max(10, "WhatsApp number must be 10 digits")
+    .regex(/^\d+$/, "WhatsApp number must contain only digits"),
+});
+
+type DistributorFormValues = z.infer<typeof distributorFormSchema>;
+
+const DistributorManagement: React.FC = () => {
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const { user } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
+  
+  // States
   const [distributors, setDistributors] = useState<Distributor[]>([]);
-  const [isAddDistributorModalOpen, setIsAddDistributorModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [selectedDistributor, setSelectedDistributor] = useState<Distributor | null>(null);
-  const [newDistributor, setNewDistributor] = useState({
-    distributor_name: '',
-    city: '',
-    address: '',
-    primary_contact_person: '',
-    primary_mobile_number: '',
-    useAsWhatsapp: true,
-    whatsapp_number: '',
-    secondary_contact_person: '',
-    secondary_mobile_number: '',
-    email: '',
-    gst_number: '',
-    distributor_category: '',
-    distributor_logo: null as File | null
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCity, setSelectedCity] = useState<string>("");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  
+  // Modal states
+  const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
+  const [isQRCodeOpen, setIsQRCodeOpen] = useState<boolean>(false);
+  const [editingDistributor, setEditingDistributor] = useState<Distributor | null>(null);
+  const [distributorToDelete, setDistributorToDelete] = useState<number | null>(null);
+  const [qrCodeData, setQRCodeData] = useState<QRCodeData | null>(null);
+  
+  // File upload state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  
+  // Form
+  const form = useForm<DistributorFormValues>({
+    resolver: zodResolver(distributorFormSchema),
+    defaultValues: {
+      distributor_name: "",
+      city: "",
+      address: "",
+      primary_contact_person: "",
+      primary_country_code: "+91",
+      primary_mobile_number: "",
+      secondary_contact_person: "",
+      secondary_country_code: "+91",
+      secondary_mobile_number: "",
+      email_id: "",
+      gst_number: "",
+      distributor_category: "",
+      whatsapp_country_code: "+91",
+      whatsapp_communication_number: "",
+    },
   });
-  const [previewLogo, setPreviewLogo] = useState('');
-  const [loading, setLoading] = useState(true);
   
-  // Load distributors from API
-  useEffect(() => {
-    fetchDistributors();
-  }, []);
-  
+  // Fetch distributors with filters
   const fetchDistributors = async () => {
-    setLoading(true);
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/distributors', {
+      let url = `${import.meta.env.VITE_API_URL}/api/distributors?page=${currentPage}&per_page=10`;
+      
+      if (searchTerm) {
+        url += `&search=${encodeURIComponent(searchTerm)}`;
+      }
+      
+      if (selectedCategory) {
+        url += `&category=${encodeURIComponent(selectedCategory)}`;
+      }
+      
+      if (selectedCity) {
+        url += `&city=${encodeURIComponent(selectedCity)}`;
+      }
+      
+      const token = localStorage.getItem("token");
+      const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          "Authorization": `Bearer ${token}`,
+        },
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch distributors');
+        throw new Error("Failed to fetch distributors");
       }
       
       const data = await response.json();
-      setDistributors(data);
+      setDistributors(data.distributors);
+      setTotalPages(data.total_pages);
+      setCategories(data.categories);
+      setCities(data.cities);
     } catch (error) {
-      console.error('Error fetching distributors:', error);
-      toast.error('Failed to load distributors');
+      console.error("Error fetching distributors:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load distributors. Please try again.",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
   
-  // Filter distributors based on role and search term
-  const getFilteredDistributors = () => {
-    let filtered = [...distributors];
-    
-    // Search term filtering
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(d => 
-        d.distributor_name.toLowerCase().includes(term) ||
-        d.city.toLowerCase().includes(term) ||
-        d.primary_contact_person.toLowerCase().includes(term) ||
-        d.gst_number.toLowerCase().includes(term)
-      );
-    }
-    
-    return filtered;
-  };
-  
-  const filteredDistributors = getFilteredDistributors();
-  
-  const handleAddDistributor = async () => {
+  // Fetch single distributor for editing
+  const fetchDistributor = async (id: number) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/distributor/${id}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch distributor details");
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error fetching distributor:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load distributor details.",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+  
+  // Generate QR Code data
+  const fetchQRCodeData = async (id: number) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/distributor/qrcode/${id}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to generate QR code");
+      }
+      
+      const data = await response.json();
+      setQRCodeData(data.distributor_data);
+      setIsQRCodeOpen(true);
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate QR code.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Handle file change
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Check file size (2MB limit)
+      if (file.size > 2 * 1024 * 1024) {
+        toast({
+          title: "Error",
+          description: "File size exceeds the 2MB limit.",
+          variant: "destructive",
+        });
+        e.target.value = "";
+        return;
+      }
+      
+      // Check file type
+      const fileType = file.type.toLowerCase();
+      if (!fileType.includes('jpeg') && !fileType.includes('jpg') && !fileType.includes('png')) {
+        toast({
+          title: "Error",
+          description: "Only JPG, JPEG, and PNG files are allowed.",
+          variant: "destructive",
+        });
+        e.target.value = "";
+        return;
+      }
+      
+      setSelectedFile(file);
+      
+      // Preview the image
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  
+  // Open add/edit form
+  const openDistributorForm = async (distributor?: Distributor) => {
+    if (distributor) {
+      const distributorDetails = await fetchDistributor(distributor.distributor_id);
+      if (distributorDetails) {
+        setEditingDistributor(distributorDetails);
+        form.reset({
+          distributor_name: distributorDetails.distributor_name,
+          city: distributorDetails.city,
+          address: distributorDetails.address,
+          primary_contact_person: distributorDetails.primary_contact_person,
+          primary_country_code: distributorDetails.primary_country_code,
+          primary_mobile_number: distributorDetails.primary_mobile_number,
+          secondary_contact_person: distributorDetails.secondary_contact_person || "",
+          secondary_country_code: distributorDetails.secondary_country_code,
+          secondary_mobile_number: distributorDetails.secondary_mobile_number || "",
+          email_id: distributorDetails.email_id,
+          gst_number: distributorDetails.gst_number,
+          distributor_category: distributorDetails.distributor_category,
+          whatsapp_country_code: distributorDetails.whatsapp_country_code,
+          whatsapp_communication_number: distributorDetails.whatsapp_communication_number,
+        });
+        
+        if (distributorDetails.distributor_logo) {
+          setPreviewUrl(`${import.meta.env.VITE_API_URL}${distributorDetails.distributor_logo}`);
+        } else {
+          setPreviewUrl(null);
+        }
+      }
+    } else {
+      setEditingDistributor(null);
+      form.reset();
+      setPreviewUrl(null);
+      setSelectedFile(null);
+    }
+    
+    setIsFormOpen(true);
+  };
+  
+  // Submit form handler
+  const onSubmit = async (data: DistributorFormValues) => {
+    try {
+      const token = localStorage.getItem("token");
       const formData = new FormData();
       
-      // Add all distributor details to formData
-      formData.append('distributor_name', newDistributor.distributor_name);
-      formData.append('city', newDistributor.city);
-      formData.append('address', newDistributor.address);
-      formData.append('primary_contact_person', newDistributor.primary_contact_person);
-      formData.append('primary_mobile_number', newDistributor.primary_mobile_number);
+      // Add all form fields to FormData
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, value);
+        }
+      });
       
-      if (newDistributor.useAsWhatsapp) {
-        formData.append('whatsapp_number', newDistributor.primary_mobile_number);
-      } else {
-        formData.append('whatsapp_number', newDistributor.whatsapp_number);
+      // Add file if selected
+      if (selectedFile) {
+        formData.append('distributor_logo', selectedFile);
       }
       
-      formData.append('secondary_contact_person', newDistributor.secondary_contact_person || '');
-      formData.append('secondary_mobile_number', newDistributor.secondary_mobile_number || '');
-      formData.append('email', newDistributor.email);
-      formData.append('gst_number', newDistributor.gst_number);
-      formData.append('distributor_category', newDistributor.distributor_category);
-      
-      if (newDistributor.distributor_logo) {
-        formData.append('distributor_logo', newDistributor.distributor_logo);
-      }
-      
-      let url = 'http://localhost:5000/api/distributors';
+      let url = `${import.meta.env.VITE_API_URL}/api/distributors`;
       let method = 'POST';
       
-      if (isEditMode && selectedDistributor) {
-        url = `http://localhost:5000/api/distributors/${selectedDistributor.id}`;
+      if (editingDistributor) {
+        url = `${import.meta.env.VITE_API_URL}/api/distributor/${editingDistributor.distributor_id}`;
         method = 'PUT';
       }
       
       const response = await fetch(url, {
-        method: method,
+        method,
         headers: {
-          'Authorization': `Bearer ${token}`
+          "Authorization": `Bearer ${token}`,
         },
-        body: formData
+        body: formData,
       });
       
       if (!response.ok) {
-        throw new Error(isEditMode ? 'Failed to update distributor' : 'Failed to add distributor');
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save distributor");
       }
       
-      // Refresh the distributor list
-      await fetchDistributors();
+      toast({
+        title: "Success",
+        description: editingDistributor 
+          ? "Distributor updated successfully" 
+          : "Distributor added successfully",
+      });
       
-      toast.success(isEditMode ? 'Distributor updated successfully' : 'Distributor added successfully');
-      
-      // Reset form and close modal
-      resetForm();
-      setIsAddDistributorModalOpen(false);
+      setIsFormOpen(false);
+      fetchDistributors();
     } catch (error) {
-      console.error('Error saving distributor:', error);
-      toast.error(isEditMode ? 'Failed to update distributor' : 'Failed to add distributor');
+      console.error("Error saving distributor:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save distributor",
+        variant: "destructive",
+      });
     }
   };
   
-  const handleEditDistributor = (distributor: Distributor) => {
-    setIsEditMode(true);
-    setSelectedDistributor(distributor);
+  // Delete distributor
+  const handleDelete = async () => {
+    if (!distributorToDelete) return;
     
-    // Set form values
-    setNewDistributor({
-      distributor_name: distributor.distributor_name,
-      city: distributor.city,
-      address: distributor.address || '',
-      primary_contact_person: distributor.primary_contact_person,
-      primary_mobile_number: distributor.primary_number.replace('+91', ''),
-      useAsWhatsapp: distributor.primary_number === distributor.whatsapp_number,
-      whatsapp_number: distributor.whatsapp_number.replace('+91', ''),
-      secondary_contact_person: distributor.secondary_contact_person !== '-' ? distributor.secondary_contact_person : '',
-      secondary_mobile_number: distributor.secondary_number !== '-' ? distributor.secondary_number.replace('+91', '') : '',
-      email: distributor.email,
-      gst_number: distributor.gst_number,
-      distributor_category: distributor.distributor_category,
-      distributor_logo: null
-    });
-    
-    setPreviewLogo(distributor.distributor_logo);
-    
-    setIsAddDistributorModalOpen(true);
-  };
-  
-  const handleDeleteDistributor = async (distributorId: number) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/distributors/${distributorId}`, {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/distributor/${distributorToDelete}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          "Authorization": `Bearer ${token}`,
+        },
       });
       
       if (!response.ok) {
-        throw new Error('Failed to delete distributor');
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete distributor");
       }
       
-      // Refresh the distributor list
-      await fetchDistributors();
+      toast({
+        title: "Success",
+        description: "Distributor deleted successfully",
+      });
       
-      toast.success('Distributor deleted successfully');
+      fetchDistributors();
     } catch (error) {
-      console.error('Error deleting distributor:', error);
-      toast.error('Failed to delete distributor');
+      console.error("Error deleting distributor:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete distributor",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDistributorToDelete(null);
     }
   };
   
-  const resetForm = () => {
-    setNewDistributor({
-      distributor_name: '',
-      city: '',
-      address: '',
-      primary_contact_person: '',
-      primary_mobile_number: '',
-      useAsWhatsapp: true,
-      whatsapp_number: '',
-      secondary_contact_person: '',
-      secondary_mobile_number: '',
-      email: '',
-      gst_number: '',
-      distributor_category: '',
-      distributor_logo: null
-    });
-    setPreviewLogo('');
-    setIsEditMode(false);
-    setSelectedDistributor(null);
+  // Check if user has permission for actions
+  const canEdit = (distributor: Distributor) => {
+    if (!user) return false;
+    return user.role === "Admin" || distributor.created_by === user.id || user.role === "Manager";
   };
   
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const canDelete = () => {
+    if (!user) return false;
+    return user.role === "Admin";
+  };
+  
+  const canAdd = () => {
+    if (!user) return false;
+    return ["Admin", "Manager", "Employee"].includes(user.role);
+  };
+  
+  // Effect hooks
+  useEffect(() => {
+    fetchDistributors();
+  }, [currentPage, searchTerm, selectedCategory, selectedCity]);
+  
+  // Render QR Code
+  const renderQRCode = () => {
+    if (!qrCodeData) return null;
     
-    // Check file type
-    if (!file.type.match('image/(jpeg|jpg|png)')) {
-      toast.error('File type not allowed. Please upload a JPG or PNG image.');
-      return;
-    }
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+      JSON.stringify({
+        id: qrCodeData.id,
+        name: qrCodeData.name,
+        city: qrCodeData.city,
+        email: qrCodeData.email,
+        gst: qrCodeData.gst
+      })
+    )}`;
     
-    // Check file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('File size exceeds 2MB limit.');
-      return;
-    }
-    
-    setNewDistributor({ ...newDistributor, distributor_logo: file });
-    
-    // Create preview URL
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPreviewLogo(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    return (
+      <div className="flex flex-col items-center justify-center p-4">
+        <img src={qrCodeUrl} alt="Distributor QR Code" className="w-48 h-48 mb-4" />
+        <div className="text-center space-y-1">
+          <p className="font-semibold text-lg">{qrCodeData.name}</p>
+          <p>{qrCodeData.city}</p>
+          <p>{qrCodeData.email}</p>
+          <p>GST: {qrCodeData.gst}</p>
+        </div>
+      </div>
+    );
   };
   
   return (
-    <Layout>
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <h1 className="text-3xl font-bold text-coolant-800">Distributor Management</h1>
-          
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Search distributors..."
-                className="pl-9"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            
-            {(user?.role === 'admin' || user?.role === 'manufacturer') && (
-              <Button 
-                onClick={() => {
-                  resetForm();
-                  setIsAddDistributorModalOpen(true);
-                }}
-                className="w-full sm:w-auto bg-coolant-400 hover:bg-coolant-500 flex items-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add New Distributor</span>
-              </Button>
-            )}
-          </div>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">Distributor Management</h1>
+      
+      {/* Control Bar */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        {/* Search */}
+        <div className="relative w-full md:w-1/3">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Input
+            placeholder="Search by name, city, or GST..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
         </div>
         
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Distributors</CardTitle>
-            <CardDescription>
-              View and manage all distributor records
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex justify-center items-center py-10">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-coolant-400"></div>
-              </div>
-            ) : (
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Distributor Name</th>
-                      <th>City</th>
-                      <th>Primary Contact</th>
-                      <th>Primary Number</th>
-                      <th>Email</th>
-                      <th>GST Number</th>
-                      <th>Distributor Category</th>
-                      <th>Logo</th>
-                      <th className="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDistributors.length > 0 ? (
-                      filteredDistributors.map((distributor) => (
-                        <tr key={distributor.id}>
-                          <td className="font-medium">{distributor.distributor_name}</td>
-                          <td>{distributor.city}</td>
-                          <td>{distributor.primary_contact_person}</td>
-                          <td>{distributor.primary_number}</td>
-                          <td>{distributor.email}</td>
-                          <td>{distributor.gst_number}</td>
-                          <td>{distributor.distributor_category}</td>
-                          <td>
-                            <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-100">
-                              <img 
-                                src={distributor.distributor_logo || '/placeholder.svg'} 
-                                alt={`${distributor.distributor_name} logo`} 
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                          </td>
-                          <td className="text-right">
-                            <div className="flex justify-end items-center space-x-2">
-                              {(user?.role === 'admin' || user?.role === 'manufacturer') && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleEditDistributor(distributor)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              )}
-                              
-                              {user?.role === 'admin' && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleDeleteDistributor(distributor.id)}
-                                >
-                                  <Trash className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={9} className="text-center py-4 text-gray-500">
-                          No distributors found
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter className="flex justify-between">
-            <div className="text-sm text-gray-500">
-              Showing {filteredDistributors.length} of {distributors.length} distributors
-            </div>
-          </CardFooter>
-        </Card>
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-full md:w-[180px]">
+              <SelectValue placeholder="Select Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Categories</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Select value={selectedCity} onValueChange={setSelectedCity}>
+            <SelectTrigger className="w-full md:w-[180px]">
+              <SelectValue placeholder="Select City" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Cities</SelectItem>
+              {cities.map((city) => (
+                <SelectItem key={city} value={city}>
+                  {city}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Add Button */}
+        {canAdd() && (
+          <Button onClick={() => openDistributorForm()} className="w-full md:w-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Distributor
+          </Button>
+        )}
       </div>
       
-      {/* Add/Edit Distributor Modal */}
-      <Dialog open={isAddDistributorModalOpen} onOpenChange={setIsAddDistributorModalOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{isEditMode ? 'Edit Distributor' : 'Add New Distributor'}</DialogTitle>
-            <DialogDescription>
-              {isEditMode 
-                ? `Update the distributor information for ${selectedDistributor?.distributor_name}.`
-                : 'Fill in the distributor information below. Required fields are marked with *.'
-              }
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="max-h-[calc(80vh-200px)] overflow-y-auto py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="distributor-name" className="required">Distributor Name</Label>
-                <Input 
-                  id="distributor-name" 
-                  placeholder="Enter distributor name"
-                  value={newDistributor.distributor_name}
-                  onChange={(e) => setNewDistributor({...newDistributor, distributor_name: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="city" className="required">City</Label>
-                <Input 
-                  id="city" 
-                  placeholder="Enter city"
-                  value={newDistributor.city}
-                  onChange={(e) => setNewDistributor({...newDistributor, city: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address" className="required">Address</Label>
-                <Input 
-                  id="address" 
-                  placeholder="Enter complete address"
-                  value={newDistributor.address}
-                  onChange={(e) => setNewDistributor({...newDistributor, address: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="primary-contact" className="required">Primary Contact Person</Label>
-                <Input 
-                  id="primary-contact" 
-                  placeholder="Enter primary contact name"
-                  value={newDistributor.primary_contact_person}
-                  onChange={(e) => setNewDistributor({...newDistributor, primary_contact_person: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="primary-mobile" className="required">Primary Mobile Number</Label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
-                    +91
-                  </span>
-                  <Input 
-                    id="primary-mobile" 
-                    className="rounded-l-none"
-                    placeholder="10-digit mobile number"
-                    value={newDistributor.primary_mobile_number}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '').substring(0, 10);
-                      setNewDistributor({...newDistributor, primary_mobile_number: value});
-                      if (newDistributor.useAsWhatsapp) {
-                        setNewDistributor({...newDistributor, primary_mobile_number: value, whatsapp_number: value});
-                      }
-                    }}
-                    required
-                    type="tel"
-                    pattern="[0-9]{10}"
-                  />
-                </div>
-              </div>
-              
-              <div className="md:col-span-2 flex items-center space-x-2">
-                <Checkbox 
-                  id="use-as-whatsapp" 
-                  checked={newDistributor.useAsWhatsapp}
-                  onCheckedChange={(checked) => {
-                    if (checked === true) {
-                      setNewDistributor({...newDistributor, useAsWhatsapp: true, whatsapp_number: newDistributor.primary_mobile_number});
-                    } else {
-                      setNewDistributor({...newDistributor, useAsWhatsapp: false});
-                    }
-                  }}
-                />
-                <Label
-                  htmlFor="use-as-whatsapp"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Use Primary Mobile Number as WhatsApp Number
-                </Label>
-              </div>
-              
-              {!newDistributor.useAsWhatsapp && (
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="whatsapp" className="required">WhatsApp Communication Number</Label>
-                  <div className="flex">
-                    <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
-                      +91
-                    </span>
-                    <Input 
-                      id="whatsapp" 
-                      className="rounded-l-none"
-                      placeholder="10-digit WhatsApp number"
-                      value={newDistributor.whatsapp_number}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '').substring(0, 10);
-                        setNewDistributor({...newDistributor, whatsapp_number: value});
-                      }}
-                      required
-                      type="tel"
-                      pattern="[0-9]{10}"
-                    />
+      {/* Table */}
+      <div className="border rounded-md overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-14">S.No</TableHead>
+              <TableHead>Distributor Name</TableHead>
+              <TableHead>City</TableHead>
+              <TableHead>Address</TableHead>
+              <TableHead>Primary Contact</TableHead>
+              <TableHead>Primary Mobile</TableHead>
+              <TableHead>Secondary Contact</TableHead>
+              <TableHead>Secondary Mobile</TableHead>
+              <TableHead>Email ID</TableHead>
+              <TableHead>GST Number</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>WhatsApp Number</TableHead>
+              <TableHead>Logo</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={14} className="text-center py-8">
+                  <div className="flex justify-center">
+                    <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-primary rounded-full"></div>
                   </div>
-                </div>
-              )}
-              
-              <div className="space-y-2">
-                <Label htmlFor="secondary-contact">Secondary Contact Person</Label>
-                <Input 
-                  id="secondary-contact" 
-                  placeholder="Enter secondary contact name (optional)"
-                  value={newDistributor.secondary_contact_person}
-                  onChange={(e) => setNewDistributor({...newDistributor, secondary_contact_person: e.target.value})}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="secondary-mobile">Secondary Mobile Number</Label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
-                    +91
-                  </span>
-                  <Input 
-                    id="secondary-mobile" 
-                    className="rounded-l-none"
-                    placeholder="10-digit mobile number (optional)"
-                    value={newDistributor.secondary_mobile_number}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '').substring(0, 10);
-                      setNewDistributor({...newDistributor, secondary_mobile_number: value});
-                    }}
-                    type="tel"
-                    pattern="[0-9]{10}"
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="email" className="required">Email ID</Label>
-                <Input 
-                  id="email" 
-                  type="email"
-                  placeholder="Enter email address"
-                  value={newDistributor.email}
-                  onChange={(e) => setNewDistributor({...newDistributor, email: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="gst" className="required">GST Number</Label>
-                <Input 
-                  id="gst" 
-                  placeholder="Enter GST number"
-                  value={newDistributor.gst_number}
-                  onChange={(e) => setNewDistributor({...newDistributor, gst_number: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="category" className="required">Distributor Category</Label>
-                <Select 
-                  value={newDistributor.distributor_category}
-                  onValueChange={(value) => setNewDistributor({...newDistributor, distributor_category: value})}
-                >
-                  <SelectTrigger id="category">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoryOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="logo" className="required">Distributor Logo</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  <div className="flex flex-col items-center justify-center space-y-2">
-                    {previewLogo ? (
-                      <div className="relative w-32 h-32 overflow-hidden rounded-lg">
-                        <img 
-                          src={previewLogo} 
-                          alt="Logo preview" 
-                          className="w-full h-full object-cover"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-1 right-1 bg-white rounded-full h-6 w-6"
-                          onClick={() => {
-                            setPreviewLogo('');
-                            setNewDistributor({...newDistributor, distributor_logo: null});
-                          }}
-                        >
-                          <Trash className="h-3 w-3 text-red-500" />
-                        </Button>
-                      </div>
+                </TableCell>
+              </TableRow>
+            ) : distributors.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={14} className="text-center py-8">
+                  No distributors found.
+                </TableCell>
+              </TableRow>
+            ) : (
+              distributors.map((distributor, index) => (
+                <TableRow key={distributor.distributor_id}>
+                  <TableCell>{(currentPage - 1) * 10 + index + 1}</TableCell>
+                  <TableCell className="font-medium">{distributor.distributor_name}</TableCell>
+                  <TableCell>{distributor.city}</TableCell>
+                  <TableCell>{distributor.address}</TableCell>
+                  <TableCell>{distributor.primary_contact_person}</TableCell>
+                  <TableCell>{distributor.primary_number}</TableCell>
+                  <TableCell>{distributor.secondary_contact_person || '-'}</TableCell>
+                  <TableCell>{distributor.secondary_number || '-'}</TableCell>
+                  <TableCell>{distributor.email_id}</TableCell>
+                  <TableCell>{distributor.gst_number}</TableCell>
+                  <TableCell>{distributor.distributor_category}</TableCell>
+                  <TableCell>{distributor.whatsapp_number}</TableCell>
+                  <TableCell>
+                    {distributor.distributor_logo ? (
+                      <img 
+                        src={`${import.meta.env.VITE_API_URL}${distributor.distributor_logo}`} 
+                        alt={distributor.distributor_name} 
+                        className="w-10 h-10 object-cover rounded-md" 
+                      />
                     ) : (
-                      <div className="w-32 h-32 flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50">
-                        <Upload className="h-8 w-8 text-gray-400" />
-                      </div>
+                      <span>No logo</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchQRCodeData(distributor.distributor_id)}
+                    >
+                      <QrCode className="h-4 w-4" />
+                    </Button>
+                    
+                    {canEdit(distributor) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openDistributorForm(distributor)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
                     )}
                     
-                    <div className="flex flex-col items-center text-sm text-gray-500">
-                      <label
-                        htmlFor="logo-upload"
-                        className="relative cursor-pointer bg-coolant-100 text-coolant-600 px-4 py-2 rounded-md font-medium hover:bg-coolant-200 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-coolant-500"
+                    {canDelete() && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setDistributorToDelete(distributor.distributor_id);
+                          setIsDeleteDialogOpen(true);
+                        }}
                       >
-                        <span>{previewLogo ? 'Change logo' : 'Upload logo'}</span>
-                        <input
-                          id="logo-upload"
-                          name="logo-upload"
-                          type="file"
-                          className="sr-only"
-                          accept="image/jpeg,image/png"
-                          onChange={handleLogoChange}
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Pagination className="mt-4">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+            
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <PaginationItem key={page}>
+                <PaginationLink
+                  isActive={page === currentPage}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            
+            <PaginationItem>
+              <PaginationNext 
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
+      
+      {/* Add/Edit Distributor Form Modal */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingDistributor ? "Edit Distributor" : "Add New Distributor"}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Distributor Name */}
+                <FormField
+                  control={form.control}
+                  name="distributor_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Distributor Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter distributor name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* City */}
+                <FormField
+                  control={form.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter city" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Address */}
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Address *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter full address" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Primary Contact Person */}
+                <FormField
+                  control={form.control}
+                  name="primary_contact_person"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Primary Contact Person *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter primary contact person" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Primary Mobile Number */}
+                <div className="flex gap-2">
+                  <FormField
+                    control={form.control}
+                    name="primary_country_code"
+                    render={({ field }) => (
+                      <FormItem className="w-1/4">
+                        <FormLabel>Code *</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="+91" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="+91">+91</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="primary_mobile_number"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormLabel>Primary Mobile Number *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="10-digit mobile number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                
+                {/* Secondary Contact Person */}
+                <FormField
+                  control={form.control}
+                  name="secondary_contact_person"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Secondary Contact Person</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter secondary contact person" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Secondary Mobile Number */}
+                <div className="flex gap-2">
+                  <FormField
+                    control={form.control}
+                    name="secondary_country_code"
+                    render={({ field }) => (
+                      <FormItem className="w-1/4">
+                        <FormLabel>Code</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="+91" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="+91">+91</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="secondary_mobile_number"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormLabel>Secondary Mobile Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="10-digit mobile number (optional)" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                
+                {/* Email */}
+                <FormField
+                  control={form.control}
+                  name="email_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email ID *</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="email" 
+                          placeholder="Enter email address" 
+                          {...field} 
                         />
-                      </label>
-                      <p className="text-xs mt-1">JPG or PNG only (max. 2MB)</p>
-                    </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* GST Number */}
+                <FormField
+                  control={form.control}
+                  name="gst_number"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GST Number *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter GST number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Distributor Category */}
+                <FormField
+                  control={form.control}
+                  name="distributor_category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Distributor Category *</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Wholesale">Wholesale</SelectItem>
+                          <SelectItem value="Retail">Retail</SelectItem>
+                          <SelectItem value="Industrial">Industrial</SelectItem>
+                          <SelectItem value="Commercial">Commercial</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* WhatsApp Number */}
+                <div className="flex gap-2">
+                  <FormField
+                    control={form.control}
+                    name="whatsapp_country_code"
+                    render={({ field }) => (
+                      <FormItem className="w-1/4">
+                        <FormLabel>Code *</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="+91" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="+91">+91</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="whatsapp_communication_number"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormLabel>WhatsApp Number *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="10-digit WhatsApp number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                
+                {/* Logo Upload */}
+                <div className="md:col-span-2">
+                  <Label htmlFor="logo">Distributor Logo</Label>
+                  <div className="flex flex-col md:flex-row gap-4 items-start mt-2">
+                    <Input
+                      id="logo"
+                      type="file"
+                      accept=".jpg,.jpeg,.png"
+                      onChange={handleFileChange}
+                    />
+                    {previewUrl && (
+                      <div className="flex flex-col items-center">
+                        <img
+                          src={previewUrl}
+                          alt="Logo Preview"
+                          className="w-24 h-24 object-cover rounded border border-gray-300"
+                        />
+                        <span className="text-sm text-gray-500 mt-1">Preview</span>
+                      </div>
+                    )}
                   </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Max size: 2MB. Formats: PNG, JPG.
+                  </p>
                 </div>
               </div>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                resetForm();
-                setIsAddDistributorModalOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleAddDistributor}
-              disabled={
-                !newDistributor.distributor_name ||
-                !newDistributor.city ||
-                !newDistributor.address ||
-                !newDistributor.primary_contact_person ||
-                !newDistributor.primary_mobile_number ||
-                (!newDistributor.useAsWhatsapp && !newDistributor.whatsapp_number) ||
-                !newDistributor.email ||
-                !newDistributor.gst_number ||
-                !newDistributor.distributor_category ||
-                (!previewLogo && !isEditMode)
-              }
-              className="bg-coolant-400 hover:bg-coolant-500"
-            >
-              {isEditMode ? 'Update Distributor' : 'Add Distributor'}
-            </Button>
-          </DialogFooter>
+              
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  {editingDistributor ? "Update" : "Add"} Distributor
+                </Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
-    </Layout>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this distributor and remove their logo file from the server.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* QR Code Dialog */}
+      <Dialog open={isQRCodeOpen} onOpenChange={setIsQRCodeOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Distributor QR Code</DialogTitle>
+          </DialogHeader>
+          {renderQRCode()}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

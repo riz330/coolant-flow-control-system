@@ -1,11 +1,21 @@
 
-# Database configuration settings
 import os
+import psycopg2
+from dotenv import load_dotenv
 
-DB_CONFIG = {
-    'host': os.environ.get('DB_HOST', 'localhost'),
-    'database': os.environ.get('DB_NAME', 'coolant_management'),
-    'user': os.environ.get('DB_USER', 'postgres'),
-    'password': os.environ.get('DB_PASSWORD', 'password'),
-    'port': int(os.environ.get('DB_PORT', 5432))
-}
+load_dotenv()
+
+def get_db_connection():
+    """
+    Create a connection to the PostgreSQL database.
+    Returns a connection object.
+    """
+    conn = psycopg2.connect(
+        host=os.getenv('DB_HOST'),
+        database=os.getenv('DB_NAME'),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        port=os.getenv('DB_PORT', 5432)
+    )
+    conn.autocommit = True
+    return conn
