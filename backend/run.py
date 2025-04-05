@@ -34,6 +34,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 # Connect to the database
 def get_db_connection():
+    print("DB_CONFIG:", DB_CONFIG)
     conn = psycopg2.connect(
         host=DB_CONFIG['host'],
         database=DB_CONFIG['database'],
@@ -796,4 +797,8 @@ def get_distributors(current_user):
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
     # Different queries based on user role
-    role =
+    # role =
+
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)    
