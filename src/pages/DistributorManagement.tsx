@@ -1,37 +1,21 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
+import { useMobile } from "@/hooks/use-mobile";
+import { Layout } from "@/components/layout/Layout";
+import { useDebounce } from "@/hooks/use-debounce";
+import { QrCode, Search } from "lucide-react";
 
-import React, { useState, useEffect } from 'react';
-import { Button } from '../components/ui/button';
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter, 
-  DialogDescription,
-  DialogClose 
-} from '../components/ui/dialog';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '../components/ui/select';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '../components/ui/pagination';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
-import { toast } from 'sonner';
-import { useAuth } from '../hooks/useAuth';
-
+// Define the interface for distributor
 interface Distributor {
   distributor_id: number;
   distributor_name: string;
@@ -52,161 +36,208 @@ interface Distributor {
   whatsapp_country_code: string;
   whatsapp_communication_number: string;
   distributor_logo: string | null;
-  created_by: number | null;
+  created_by: number;
   created_at: string;
   updated_at: string | null;
 }
 
-const DistributorManagement: React.FC = () => {
+type DistributorFormData = Omit<Distributor, 'distributor_id' | 'created_by' | 'created_at' | 'updated_at'>;
+
+const DistributorManagement = () => {
   const { user } = useAuth();
+  const isMobile = useMobile();
+  
+  // States for the distributors and form
   const [distributors, setDistributors] = useState<Distributor[]>([]);
-  const [filteredDistributors, setFilteredDistributors] = useState<Distributor[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  
-  // Modal states
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
-  const [selectedDistributor, setSelectedDistributor] = useState<Distributor | null>(null);
-  
-  // Form state
-  const [formData, setFormData] = useState({
-    distributor_name: '',
-    city: '',
-    state: '',
-    pincode: '',
-    address: '',
-    website: '',
-    primary_contact_person: '',
-    primary_country_code: '+91',
-    primary_mobile_number: '',
-    secondary_contact_person: '',
-    secondary_country_code: '+91',
-    secondary_mobile_number: '',
-    email_id: '',
-    gst_number: '',
-    distributor_category: '',
-    whatsapp_country_code: '+91',
-    whatsapp_communication_number: '',
-    distributor_logo: null as File | null
-  });
-  
-  // Preview logo
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  
-  // Filter options
   const [categories, setCategories] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [states, setStates] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedCity, setSelectedCity] = useState<string>('');
-  const [selectedState, setSelectedState] = useState<string>('');
   
-  // Role-based access control
-  const canCreate = user && ['admin', 'manager', 'employee'].includes(user.role);
-  const canEdit = user && ['admin', 'manager'].includes(user.role);
-  const canDelete = user && user.role === 'admin';
+  // Search and filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
   
-  // Fetch distributors from API
+  // Dialog states
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedDistributor, setSelectedDistributor] = useState<Distributor | null>(null);
+  const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const recordsPerPage = 10;
+  
+  // Form data
+  const [formData, setFormData] = useState<DistributorFormData>({
+    distributor_name: "",
+    city: "",
+    state: "",
+    pincode: "",
+    address: "",
+    website: "",
+    primary_contact_person: "",
+    primary_country_code: "+91", // Default value
+    primary_mobile_number: "",
+    secondary_contact_person: "",
+    secondary_country_code: "",
+    secondary_mobile_number: "",
+    email_id: "",
+    gst_number: "",
+    distributor_category: "",
+    whatsapp_country_code: "+91", // Default value
+    whatsapp_communication_number: "",
+    distributor_logo: null
+  });
+  
+  // File upload state
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  
+  // Fetch functions for initial data load
   const fetchDistributors = async () => {
     try {
-      const response = await fetch('/api/distributors');
+      const response = await fetch('/api/distributors/');
       const data = await response.json();
       
       if (data.success) {
         setDistributors(data.distributors);
-        setFilteredDistributors(data.distributors);
+        calculateTotalPages(data.distributors.length);
       } else {
-        toast.error(data.error || 'Failed to fetch distributors');
+        toast.error(data.error || "Failed to load distributors");
       }
     } catch (error) {
-      console.error('Error fetching distributors:', error);
-      toast.error('Failed to fetch distributors');
+      console.error("Error fetching distributors:", error);
+      toast.error("Failed to fetch distributors");
     }
   };
   
-  // Fetch filter options
-  const fetchFilterOptions = async () => {
+  const fetchCategories = async () => {
     try {
-      const [categoriesRes, citiesRes, statesRes] = await Promise.all([
-        fetch('/api/distributors/categories').then(res => res.json()),
-        fetch('/api/distributors/cities').then(res => res.json()),
-        fetch('/api/distributors/states').then(res => res.json())
-      ]);
+      const response = await fetch('/api/distributors/categories');
+      const data = await response.json();
       
-      if (categoriesRes.success) {
-        setCategories(categoriesRes.categories);
-      }
-      
-      if (citiesRes.success) {
-        setCities(citiesRes.cities);
-      }
-      
-      if (statesRes.success) {
-        setStates(statesRes.states);
+      if (data.success) {
+        setCategories(data.categories);
       }
     } catch (error) {
-      console.error('Error fetching filter options:', error);
+      console.error("Error fetching categories:", error);
     }
   };
   
+  const fetchCities = async () => {
+    try {
+      const response = await fetch('/api/distributors/cities');
+      const data = await response.json();
+      
+      if (data.success) {
+        setCities(data.cities);
+      }
+    } catch (error) {
+      console.error("Error fetching cities:", error);
+    }
+  };
+  
+  const fetchStates = async () => {
+    try {
+      const response = await fetch('/api/distributors/states');
+      const data = await response.json();
+      
+      if (data.success) {
+        setStates(data.states);
+      }
+    } catch (error) {
+      console.error("Error fetching states:", error);
+    }
+  };
+  
+  // Initial data fetch
   useEffect(() => {
     fetchDistributors();
-    fetchFilterOptions();
+    fetchCategories();
+    fetchCities();
+    fetchStates();
   }, []);
   
-  // Filter distributors
+  // Filter distributors based on search and filters
   useEffect(() => {
-    let filtered = [...distributors];
-    
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        dist => 
-          dist.distributor_name.toLowerCase().includes(query) ||
-          dist.city.toLowerCase().includes(query) ||
-          dist.gst_number.toLowerCase().includes(query)
-      );
+    // If no filters and no search, fetch all distributors
+    if (!debouncedSearchTerm && !categoryFilter && !cityFilter && !stateFilter) {
+      fetchDistributors();
+      return;
     }
     
-    // Category filter
-    if (selectedCategory) {
-      filtered = filtered.filter(dist => dist.distributor_category === selectedCategory);
-    }
+    // Otherwise filter the distributors
+    const fetchFilteredDistributors = async () => {
+      try {
+        // Build query string for filters
+        const queryParams = new URLSearchParams();
+        
+        if (debouncedSearchTerm) {
+          queryParams.append('search', debouncedSearchTerm);
+        }
+        
+        if (categoryFilter) {
+          queryParams.append('category', categoryFilter);
+        }
+        
+        if (cityFilter) {
+          queryParams.append('city', cityFilter);
+        }
+        
+        if (stateFilter) {
+          queryParams.append('state', stateFilter);
+        }
+        
+        // Fetch filtered distributors
+        const response = await fetch(`/api/distributors/?${queryParams.toString()}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          setDistributors(data.distributors);
+          calculateTotalPages(data.distributors.length);
+        } else {
+          toast.error(data.error || "Failed to load filtered distributors");
+        }
+      } catch (error) {
+        console.error("Error fetching filtered distributors:", error);
+        toast.error("Failed to fetch filtered distributors");
+      }
+    };
     
-    // City filter
-    if (selectedCity) {
-      filtered = filtered.filter(dist => dist.city === selectedCity);
-    }
-    
-    // State filter
-    if (selectedState) {
-      filtered = filtered.filter(dist => dist.state === selectedState);
-    }
-    
-    setFilteredDistributors(filtered);
-    setCurrentPage(1); // Reset to first page when filters change
-  }, [searchQuery, selectedCategory, selectedCity, selectedState, distributors]);
+    fetchFilteredDistributors();
+  }, [debouncedSearchTerm, categoryFilter, cityFilter, stateFilter]);
   
-  // Pagination
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredDistributors.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredDistributors.length / itemsPerPage);
+  // Calculate total pages
+  const calculateTotalPages = (totalRecords: number) => {
+    setTotalPages(Math.ceil(totalRecords / recordsPerPage));
+  };
   
-  // Handle input changes
+  // Get current distributors for pagination
+  const getCurrentDistributors = () => {
+    const indexOfLastRecord = currentPage * recordsPerPage;
+    const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+    return distributors.slice(indexOfFirstRecord, indexOfLastRecord);
+  };
+  
+  // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Special handling for GST to convert to uppercase
+    if (name === 'gst_number') {
+      setFormData({ ...formData, [name]: value.toUpperCase() });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
   
   // Handle select changes
   const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData({ ...formData, [name]: value });
   };
   
   // Handle file upload
@@ -216,59 +247,57 @@ const DistributorManagement: React.FC = () => {
       
       // Check file size (max 2MB)
       if (file.size > 2 * 1024 * 1024) {
-        toast.error('File size exceeds 2MB limit');
+        toast.error("File size exceeds 2MB limit");
         return;
       }
       
       // Check file type
       if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-        toast.error('Only PNG, JPG, and JPEG images are allowed');
+        toast.error("Only PNG, JPG, and JPEG images are allowed");
         return;
       }
       
-      setFormData(prev => ({ ...prev, distributor_logo: file }));
+      setLogoFile(file);
       
-      // Set preview
+      // Create preview
       const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setLogoPreview(event.target.result as string);
-        }
+      reader.onload = (e) => {
+        setLogoPreview(e.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
   
-  // Open add modal
-  const openAddModal = () => {
-    // Reset form
+  // Open form for adding a new distributor
+  const handleAddDistributor = () => {
     setFormData({
-      distributor_name: '',
-      city: '',
-      state: '',
-      pincode: '',
-      address: '',
-      website: '',
-      primary_contact_person: '',
-      primary_country_code: '+91',
-      primary_mobile_number: '',
-      secondary_contact_person: '',
-      secondary_country_code: '+91',
-      secondary_mobile_number: '',
-      email_id: '',
-      gst_number: '',
-      distributor_category: '',
-      whatsapp_country_code: '+91',
-      whatsapp_communication_number: '',
+      distributor_name: "",
+      city: "",
+      state: "",
+      pincode: "",
+      address: "",
+      website: "",
+      primary_contact_person: "",
+      primary_country_code: "+91",
+      primary_mobile_number: "",
+      secondary_contact_person: "",
+      secondary_country_code: "",
+      secondary_mobile_number: "",
+      email_id: "",
+      gst_number: "",
+      distributor_category: "",
+      whatsapp_country_code: "+91",
+      whatsapp_communication_number: "",
       distributor_logo: null
     });
+    setLogoFile(null);
     setLogoPreview(null);
     setSelectedDistributor(null);
-    setIsAddModalOpen(true);
+    setIsFormOpen(true);
   };
   
-  // Open edit modal
-  const openEditModal = (distributor: Distributor) => {
+  // Open form for editing a distributor
+  const handleEditDistributor = (distributor: Distributor) => {
     setSelectedDistributor(distributor);
     setFormData({
       distributor_name: distributor.distributor_name,
@@ -276,66 +305,106 @@ const DistributorManagement: React.FC = () => {
       state: distributor.state,
       pincode: distributor.pincode,
       address: distributor.address,
-      website: distributor.website || '',
+      website: distributor.website || "",
       primary_contact_person: distributor.primary_contact_person,
       primary_country_code: distributor.primary_country_code,
       primary_mobile_number: distributor.primary_mobile_number,
-      secondary_contact_person: distributor.secondary_contact_person || '',
-      secondary_country_code: distributor.secondary_country_code || '+91',
-      secondary_mobile_number: distributor.secondary_mobile_number || '',
+      secondary_contact_person: distributor.secondary_contact_person || "",
+      secondary_country_code: distributor.secondary_country_code || "",
+      secondary_mobile_number: distributor.secondary_mobile_number || "",
       email_id: distributor.email_id,
       gst_number: distributor.gst_number,
       distributor_category: distributor.distributor_category,
       whatsapp_country_code: distributor.whatsapp_country_code,
       whatsapp_communication_number: distributor.whatsapp_communication_number,
-      distributor_logo: null
+      distributor_logo: distributor.distributor_logo
     });
-    setLogoPreview(distributor.distributor_logo ? `${distributor.distributor_logo}` : null);
-    setIsAddModalOpen(true);
+    setLogoPreview(distributor.distributor_logo);
+    setIsFormOpen(true);
   };
   
-  // Open delete confirmation
-  const openDeleteConfirmation = (distributor: Distributor) => {
+  // Open delete confirmation dialog
+  const handleDeleteClick = (distributor: Distributor) => {
     setSelectedDistributor(distributor);
-    setIsDeleteAlertOpen(true);
+    setIsDeleteDialogOpen(true);
   };
   
-  // Submit form
+  // Open QR code dialog
+  const handleQrCodeClick = (distributor: Distributor) => {
+    setSelectedDistributor(distributor);
+    setIsQrDialogOpen(true);
+  };
+  
+  // Submit form to add or update distributor
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate required fields
-    const requiredFields = [
-      'distributor_name', 'city', 'state', 'pincode', 'address',
-      'primary_contact_person', 'primary_country_code', 'primary_mobile_number',
-      'email_id', 'gst_number', 'distributor_category',
-      'whatsapp_country_code', 'whatsapp_communication_number'
-    ];
-    
-    const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
-    
-    if (missingFields.length > 0) {
-      toast.error(`Please fill in all required fields: ${missingFields.join(', ')}`);
+    // Validate form
+    if (!formData.distributor_name || !formData.city || !formData.state || 
+        !formData.pincode || !formData.address || !formData.primary_contact_person || 
+        !formData.primary_country_code || !formData.primary_mobile_number || 
+        !formData.email_id || !formData.gst_number || !formData.distributor_category || 
+        !formData.whatsapp_country_code || !formData.whatsapp_communication_number) {
+      toast.error("Please fill in all required fields");
       return;
     }
     
-    // Create FormData
-    const formPayload = new FormData();
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email_id)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
     
-    // Add all form fields
+    // Validate GST format (15 characters alphanumeric)
+    const gstRegex = /^[0-9A-Z]{15}$/;
+    if (!gstRegex.test(formData.gst_number)) {
+      toast.error("GST Number must be 15 alphanumeric characters");
+      return;
+    }
+    
+    // Validate mobile numbers (10 digits)
+    const mobileRegex = /^\d{10}$/;
+    if (!mobileRegex.test(formData.primary_mobile_number)) {
+      toast.error("Primary Mobile Number must be 10 digits");
+      return;
+    }
+    
+    if (formData.secondary_mobile_number && !mobileRegex.test(formData.secondary_mobile_number)) {
+      toast.error("Secondary Mobile Number must be 10 digits");
+      return;
+    }
+    
+    if (!mobileRegex.test(formData.whatsapp_communication_number)) {
+      toast.error("WhatsApp Number must be 10 digits");
+      return;
+    }
+    
+    // Validate website format if provided
+    if (formData.website && formData.website.trim() !== "") {
+      const websiteRegex = /^(http:\/\/|https:\/\/)/;
+      if (!websiteRegex.test(formData.website)) {
+        toast.error("Website URL must start with http:// or https://");
+        return;
+      }
+    }
+    
+    // Create FormData object for file upload
+    const formPayload = new FormData();
     Object.entries(formData).forEach(([key, value]) => {
-      if (key === 'distributor_logo') {
-        if (value) {
-          formPayload.append(key, value);
-        }
-      } else if (value !== null && value !== undefined) {
-        formPayload.append(key, value);
+      if (value !== null) {
+        formPayload.append(key, value.toString());
       }
     });
     
+    // Add file if selected
+    if (logoFile) {
+      formPayload.append('distributor_logo', logoFile);
+    }
+    
     // Add created_by if adding new distributor
     if (!selectedDistributor && user) {
-      formPayload.append('created_by', user.id.toString());
+      formPayload.append('created_by', user.user_id.toString());
     }
     
     try {
@@ -345,13 +414,13 @@ const DistributorManagement: React.FC = () => {
         // Update existing distributor
         response = await fetch(`/api/distributors/${selectedDistributor.distributor_id}`, {
           method: 'PUT',
-          body: formPayload
+          body: formPayload,
         });
       } else {
         // Create new distributor
-        response = await fetch('/api/distributors', {
+        response = await fetch('/api/distributors/', {
           method: 'POST',
-          body: formPayload
+          body: formPayload,
         });
       }
       
@@ -359,19 +428,19 @@ const DistributorManagement: React.FC = () => {
       
       if (data.success) {
         toast.success(data.message);
-        setIsAddModalOpen(false);
         fetchDistributors(); // Refresh list
+        setIsFormOpen(false);
       } else {
-        toast.error(data.error || 'Operation failed');
+        toast.error(data.error || "Failed to save distributor");
       }
     } catch (error) {
-      console.error('Error submitting form:', error);
-      toast.error('Failed to submit form');
+      console.error("Error saving distributor:", error);
+      toast.error("Failed to save distributor");
     }
   };
   
-  // Delete distributor
-  const handleDelete = async () => {
+  // Delete a distributor
+  const handleDeleteConfirm = async () => {
     if (!selectedDistributor) return;
     
     try {
@@ -383,215 +452,250 @@ const DistributorManagement: React.FC = () => {
       
       if (data.success) {
         toast.success(data.message);
-        setIsDeleteAlertOpen(false);
         fetchDistributors(); // Refresh list
       } else {
-        toast.error(data.error || 'Delete failed');
+        toast.error(data.error || "Failed to delete distributor");
       }
     } catch (error) {
-      console.error('Error deleting distributor:', error);
-      toast.error('Failed to delete distributor');
+      console.error("Error deleting distributor:", error);
+      toast.error("Failed to delete distributor");
     }
+    
+    setIsDeleteDialogOpen(false);
+  };
+  
+  // Check if user has permission to perform certain actions
+  const hasEditPermission = () => {
+    return user && ['Admin', 'Manager'].includes(user.role);
+  };
+  
+  const hasAddPermission = () => {
+    return user && ['Admin', 'Manager', 'Employee'].includes(user.role);
+  };
+  
+  const hasDeletePermission = () => {
+    return user && user.role === 'Admin';
   };
   
   return (
-    <div className="container mx-auto p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Distributor Management</CardTitle>
-          <CardDescription>
-            Manage all distributors in the system
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* Search and Filters */}
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <div className="w-full md:w-1/4">
-              <Input 
-                placeholder="Search by name, city, GST..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="w-full md:w-1/4">
-              <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>{category}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full md:w-1/4">
-              <Select value={selectedCity} onValueChange={(value) => setSelectedCity(value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by City" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All Cities</SelectItem>
-                  {cities.map((city) => (
-                    <SelectItem key={city} value={city}>{city}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full md:w-1/4">
-              <Select value={selectedState} onValueChange={(value) => setSelectedState(value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by State" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All States</SelectItem>
-                  {states.map((state) => (
-                    <SelectItem key={state} value={state}>{state}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full md:w-auto">
-              {canCreate && (
-                <Button onClick={openAddModal}>Add Distributor</Button>
+    <Layout>
+      <div className="container mx-auto p-4">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Distributor Management</CardTitle>
+            <CardDescription>Manage all distributors from this dashboard</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+              {/* Search box */}
+              <div className="relative w-full md:w-1/3">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, city, GST..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              
+              {/* Filters */}
+              <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="w-full md:w-[150px]">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Categories</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={cityFilter} onValueChange={setCityFilter}>
+                  <SelectTrigger className="w-full md:w-[150px]">
+                    <SelectValue placeholder="City" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Cities</SelectItem>
+                    {cities.map((city) => (
+                      <SelectItem key={city} value={city}>
+                        {city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={stateFilter} onValueChange={setStateFilter}>
+                  <SelectTrigger className="w-full md:w-[150px]">
+                    <SelectValue placeholder="State" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All States</SelectItem>
+                    {states.map((state) => (
+                      <SelectItem key={state} value={state}>
+                        {state}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Add button */}
+              {hasAddPermission() && (
+                <Button onClick={handleAddDistributor} className="w-full md:w-auto">
+                  Add Distributor
+                </Button>
               )}
             </div>
-          </div>
-          
-          {/* Distributors Table */}
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>S.No</TableHead>
-                  <TableHead>Distributor Name</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Contact Person</TableHead>
-                  <TableHead>Mobile</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>GST</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Logo</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {currentItems.length > 0 ? (
-                  currentItems.map((distributor, index) => (
+            
+            {/* Distributors table */}
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>S.No</TableHead>
+                    <TableHead>Distributor Name</TableHead>
+                    <TableHead className="hidden md:table-cell">City</TableHead>
+                    <TableHead className="hidden md:table-cell">State</TableHead>
+                    <TableHead className="hidden md:table-cell">GST Number</TableHead>
+                    <TableHead className="hidden md:table-cell">Category</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Logo</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {getCurrentDistributors().map((distributor, index) => (
                     <TableRow key={distributor.distributor_id}>
-                      <TableCell>{indexOfFirstItem + index + 1}</TableCell>
-                      <TableCell>{distributor.distributor_name}</TableCell>
-                      <TableCell>{distributor.city}</TableCell>
-                      <TableCell>{distributor.state}</TableCell>
-                      <TableCell>{distributor.primary_contact_person}</TableCell>
-                      <TableCell>{distributor.primary_country_code} {distributor.primary_mobile_number}</TableCell>
-                      <TableCell>{distributor.email_id}</TableCell>
-                      <TableCell>{distributor.gst_number}</TableCell>
-                      <TableCell>{distributor.distributor_category}</TableCell>
+                      <TableCell>
+                        {(currentPage - 1) * recordsPerPage + index + 1}
+                      </TableCell>
+                      <TableCell className="font-medium">{distributor.distributor_name}</TableCell>
+                      <TableCell className="hidden md:table-cell">{distributor.city}</TableCell>
+                      <TableCell className="hidden md:table-cell">{distributor.state}</TableCell>
+                      <TableCell className="hidden md:table-cell">{distributor.gst_number}</TableCell>
+                      <TableCell className="hidden md:table-cell">{distributor.distributor_category}</TableCell>
+                      <TableCell>
+                        {distributor.primary_country_code} {distributor.primary_mobile_number}
+                      </TableCell>
                       <TableCell>
                         {distributor.distributor_logo ? (
                           <img 
                             src={distributor.distributor_logo} 
-                            alt="Logo" 
-                            className="w-10 h-10 object-contain"
+                            alt={distributor.distributor_name}
+                            className="w-10 h-10 object-cover rounded-full"
                           />
                         ) : (
-                          <span>No Logo</span>
+                          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
+                            {distributor.distributor_name.charAt(0).toUpperCase()}
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex space-x-2">
-                          {canEdit && (
+                        <div className="flex gap-2">
+                          {hasEditPermission() && (
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              onClick={() => openEditModal(distributor)}
+                              onClick={() => handleEditDistributor(distributor)}
                             >
-                              Edit
+                              ✏️
                             </Button>
                           )}
-                          {canDelete && (
+                          
+                          {hasDeletePermission() && (
                             <Button 
-                              variant="destructive" 
-                              size="sm"
-                              onClick={() => openDeleteConfirmation(distributor)}
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleDeleteClick(distributor)}
+                              className="text-red-500"
                             >
-                              Delete
+                              🗑️
                             </Button>
                           )}
+                          
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleQrCodeClick(distributor)}
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center py-4">
-                      No distributors found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <Pagination className="mt-4">
-              <PaginationContent>
-                <PaginationItem>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </Button>
-                </PaginationItem>
-                
-                {Array.from({ length: totalPages }).map((_, index) => (
-                  <PaginationItem key={index}>
+                  ))}
+                  
+                  {distributors.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                        No distributors found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            
+            {/* Pagination */}
+            {distributors.length > 0 && (
+              <Pagination className="mt-4">
+                <PaginationContent>
+                  <PaginationItem>
                     <Button
-                      variant={currentPage === index + 1 ? "default" : "outline"}
+                      variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(index + 1)}
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
                     >
-                      {index + 1}
+                      Previous
                     </Button>
                   </PaginationItem>
-                ))}
-                
-                <PaginationItem>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </Button>
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
-        </CardContent>
-      </Card>
+                  
+                  {Array.from({ length: totalPages }).map((_, index) => (
+                    <PaginationItem key={index}>
+                      <Button
+                        variant={currentPage === index + 1 ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(index + 1)}
+                      >
+                        {index + 1}
+                      </Button>
+                    </PaginationItem>
+                  ))}
+                  
+                  <PaginationItem>
+                    <Button
+                      variant="outline"
+                      size="sm" 
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            )}
+          </CardContent>
+        </Card>
+      </div>
       
-      {/* Add/Edit Modal */}
-      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+      {/* Add/Edit Distributor Form Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selectedDistributor ? 'Edit Distributor' : 'Add New Distributor'}</DialogTitle>
-            <DialogDescription>
-              Fill in the distributor details below
-            </DialogDescription>
+            <DialogTitle>
+              {selectedDistributor ? "Edit Distributor" : "Add New Distributor"}
+            </DialogTitle>
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Distributor Name */}
+              {/* Distributor Basic Info */}
               <div className="space-y-2">
                 <Label htmlFor="distributor_name">Distributor Name *</Label>
                 <Input
@@ -603,168 +707,6 @@ const DistributorManagement: React.FC = () => {
                 />
               </div>
               
-              {/* City */}
-              <div className="space-y-2">
-                <Label htmlFor="city">City *</Label>
-                <Input
-                  id="city"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              {/* State */}
-              <div className="space-y-2">
-                <Label htmlFor="state">State *</Label>
-                <Input
-                  id="state"
-                  name="state"
-                  value={formData.state}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              {/* Pincode */}
-              <div className="space-y-2">
-                <Label htmlFor="pincode">Pincode *</Label>
-                <Input
-                  id="pincode"
-                  name="pincode"
-                  value={formData.pincode}
-                  onChange={handleInputChange}
-                  required
-                  type="text"
-                  maxLength={10}
-                />
-              </div>
-              
-              {/* Address */}
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address">Address *</Label>
-                <Input
-                  id="address"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              {/* Website */}
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="website">Website (Optional)</Label>
-                <Input
-                  id="website"
-                  name="website"
-                  value={formData.website}
-                  onChange={handleInputChange}
-                  placeholder="https://example.com"
-                />
-              </div>
-              
-              {/* Primary Contact Person */}
-              <div className="space-y-2">
-                <Label htmlFor="primary_contact_person">Primary Contact Person *</Label>
-                <Input
-                  id="primary_contact_person"
-                  name="primary_contact_person"
-                  value={formData.primary_contact_person}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              {/* Primary Mobile Number */}
-              <div className="space-y-2">
-                <Label htmlFor="primary_mobile_number">Primary Mobile Number *</Label>
-                <div className="flex">
-                  <Input
-                    id="primary_country_code"
-                    name="primary_country_code"
-                    value={formData.primary_country_code}
-                    onChange={handleInputChange}
-                    className="w-20 mr-2"
-                    required
-                  />
-                  <Input
-                    id="primary_mobile_number"
-                    name="primary_mobile_number"
-                    value={formData.primary_mobile_number}
-                    onChange={handleInputChange}
-                    required
-                    maxLength={15}
-                  />
-                </div>
-              </div>
-              
-              {/* Secondary Contact Person */}
-              <div className="space-y-2">
-                <Label htmlFor="secondary_contact_person">Secondary Contact Person (Optional)</Label>
-                <Input
-                  id="secondary_contact_person"
-                  name="secondary_contact_person"
-                  value={formData.secondary_contact_person}
-                  onChange={handleInputChange}
-                />
-              </div>
-              
-              {/* Secondary Mobile Number */}
-              <div className="space-y-2">
-                <Label htmlFor="secondary_mobile_number">Secondary Mobile Number (Optional)</Label>
-                <div className="flex">
-                  <Input
-                    id="secondary_country_code"
-                    name="secondary_country_code"
-                    value={formData.secondary_country_code}
-                    onChange={handleInputChange}
-                    className="w-20 mr-2"
-                  />
-                  <Input
-                    id="secondary_mobile_number"
-                    name="secondary_mobile_number"
-                    value={formData.secondary_mobile_number}
-                    onChange={handleInputChange}
-                    maxLength={15}
-                  />
-                </div>
-              </div>
-              
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email_id">Email ID *</Label>
-                <Input
-                  id="email_id"
-                  name="email_id"
-                  type="email"
-                  value={formData.email_id}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              {/* GST Number */}
-              <div className="space-y-2">
-                <Label htmlFor="gst_number">GST Number *</Label>
-                <Input
-                  id="gst_number"
-                  name="gst_number"
-                  value={formData.gst_number}
-                  onChange={(e) => {
-                    // Convert to uppercase for GST
-                    setFormData(prev => ({
-                      ...prev,
-                      gst_number: e.target.value.toUpperCase()
-                    }));
-                  }}
-                  required
-                  maxLength={15}
-                />
-              </div>
-              
-              {/* Distributor Category */}
               <div className="space-y-2">
                 <Label htmlFor="distributor_category">Distributor Category *</Label>
                 <Select 
@@ -783,48 +725,196 @@ const DistributorManagement: React.FC = () => {
                 </Select>
               </div>
               
-              {/* WhatsApp Number */}
+              <div className="space-y-2">
+                <Label htmlFor="city">City *</Label>
+                <Input
+                  id="city"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="state">State *</Label>
+                <Input
+                  id="state"
+                  name="state"
+                  value={formData.state}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="pincode">Pincode *</Label>
+                <Input
+                  id="pincode"
+                  name="pincode"
+                  type="text"
+                  value={formData.pincode}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="gst_number">GST Number *</Label>
+                <Input
+                  id="gst_number"
+                  name="gst_number"
+                  value={formData.gst_number}
+                  onChange={handleInputChange}
+                  required
+                  maxLength={15}
+                />
+              </div>
+              
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address">Address *</Label>
+                <Input
+                  id="address"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="website">Website URL</Label>
+                <Input
+                  id="website"
+                  name="website"
+                  value={formData.website || ""}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com"
+                />
+              </div>
+              
+              {/* Contact Information */}
+              <div className="space-y-2">
+                <Label htmlFor="primary_contact_person">Primary Contact Person *</Label>
+                <Input
+                  id="primary_contact_person"
+                  name="primary_contact_person"
+                  value={formData.primary_contact_person}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="email_id">Email ID *</Label>
+                <Input
+                  id="email_id"
+                  name="email_id"
+                  type="email"
+                  value={formData.email_id}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="primary_country_code">Primary Country Code *</Label>
+                <Input
+                  id="primary_country_code"
+                  name="primary_country_code"
+                  value={formData.primary_country_code}
+                  onChange={handleInputChange}
+                  required
+                  placeholder="+91"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="primary_mobile_number">Primary Mobile Number *</Label>
+                <Input
+                  id="primary_mobile_number"
+                  name="primary_mobile_number"
+                  value={formData.primary_mobile_number}
+                  onChange={handleInputChange}
+                  required
+                  maxLength={10}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="secondary_contact_person">Secondary Contact Person</Label>
+                <Input
+                  id="secondary_contact_person"
+                  name="secondary_contact_person"
+                  value={formData.secondary_contact_person || ""}
+                  onChange={handleInputChange}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="secondary_country_code">Secondary Country Code</Label>
+                <Input
+                  id="secondary_country_code"
+                  name="secondary_country_code"
+                  value={formData.secondary_country_code || ""}
+                  onChange={handleInputChange}
+                  placeholder="+91"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="secondary_mobile_number">Secondary Mobile Number</Label>
+                <Input
+                  id="secondary_mobile_number"
+                  name="secondary_mobile_number"
+                  value={formData.secondary_mobile_number || ""}
+                  onChange={handleInputChange}
+                  maxLength={10}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="whatsapp_country_code">WhatsApp Country Code *</Label>
+                <Input
+                  id="whatsapp_country_code"
+                  name="whatsapp_country_code"
+                  value={formData.whatsapp_country_code}
+                  onChange={handleInputChange}
+                  required
+                  placeholder="+91"
+                />
+              </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="whatsapp_communication_number">WhatsApp Number *</Label>
-                <div className="flex">
-                  <Input
-                    id="whatsapp_country_code"
-                    name="whatsapp_country_code"
-                    value={formData.whatsapp_country_code}
-                    onChange={handleInputChange}
-                    className="w-20 mr-2"
-                    required
-                  />
-                  <Input
-                    id="whatsapp_communication_number"
-                    name="whatsapp_communication_number"
-                    value={formData.whatsapp_communication_number}
-                    onChange={handleInputChange}
-                    required
-                    maxLength={15}
-                  />
-                </div>
+                <Input
+                  id="whatsapp_communication_number"
+                  name="whatsapp_communication_number"
+                  value={formData.whatsapp_communication_number}
+                  onChange={handleInputChange}
+                  required
+                  maxLength={10}
+                />
               </div>
               
               {/* Logo Upload */}
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="distributor_logo">Distributor Logo (Max 2MB, PNG/JPG)</Label>
+                <Label htmlFor="logo">Distributor Logo (Max 2MB, PNG/JPG)</Label>
                 <Input
-                  id="distributor_logo"
-                  name="distributor_logo"
+                  id="logo"
+                  name="logo"
                   type="file"
                   accept=".png,.jpg,.jpeg"
                   onChange={handleFileChange}
                 />
                 
-                {/* Logo Preview */}
                 {logoPreview && (
                   <div className="mt-2">
-                    <p className="text-sm text-gray-500 mb-1">Logo Preview:</p>
-                    <img 
-                      src={logoPreview} 
-                      alt="Logo Preview" 
-                      className="w-32 h-32 object-contain border border-gray-200 rounded p-2"
+                    <p className="text-sm text-gray-500">Logo Preview:</p>
+                    <img
+                      src={logoPreview}
+                      alt="Logo Preview"
+                      className="mt-1 h-20 w-20 object-contain border rounded-md"
                     />
                   </div>
                 )}
@@ -832,32 +922,63 @@ const DistributorManagement: React.FC = () => {
             </div>
             
             <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline" type="button">Cancel</Button>
-              </DialogClose>
-              <Button type="submit">{selectedDistributor ? 'Update' : 'Add'} Distributor</Button>
+              <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
       
-      {/* Delete Confirmation */}
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedDistributor?.distributor_name}?
-              This action cannot be undone.
+              This will permanently delete {selectedDistributor?.distributor_name}. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600">
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      
+      {/* QR Code Dialog */}
+      <Dialog open={isQrDialogOpen} onOpenChange={setIsQrDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Distributor QR Code</DialogTitle>
+          </DialogHeader>
+          {selectedDistributor && (
+            <div className="flex flex-col items-center">
+              <div className="bg-white p-4 rounded-md">
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                    JSON.stringify({
+                      id: selectedDistributor.distributor_id,
+                      name: selectedDistributor.distributor_name,
+                      contact: `${selectedDistributor.primary_country_code}${selectedDistributor.primary_mobile_number}`,
+                      email: selectedDistributor.email_id
+                    })
+                  )}`}
+                  alt="QR Code"
+                  className="w-40 h-40"
+                />
+              </div>
+              <p className="mt-2 text-center text-sm text-gray-500">
+                Scan this QR code to get distributor details
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Layout>
   );
 };
 

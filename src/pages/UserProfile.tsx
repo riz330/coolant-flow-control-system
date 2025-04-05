@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,7 +62,8 @@ const UserProfile = () => {
     
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/profile/?user_id=${user.user_id}`);
+      // Use the correct property name (id instead of user_id)
+      const response = await fetch(`/api/profile/?user_id=${user.id}`);
       const data = await response.json();
       
       if (data.success) {
@@ -151,7 +151,8 @@ const UserProfile = () => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          user_id: user.user_id,
+          // Use the correct property name (id instead of user_id)
+          user_id: user.id,
           current_password: passwordForm.currentPassword,
           new_password: passwordForm.newPassword
         })
@@ -204,7 +205,8 @@ const UserProfile = () => {
     try {
       // Use FormData to handle file upload
       const formData = new FormData();
-      formData.append("user_id", user.user_id.toString());
+      // Use the correct property name (id instead of user_id)
+      formData.append("user_id", user.id.toString());
       formData.append("fullname", profileForm.fullname);
       formData.append("username", profileForm.username);
       formData.append("email", profileForm.email);
