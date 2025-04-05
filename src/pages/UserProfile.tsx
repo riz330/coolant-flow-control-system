@@ -1,522 +1,582 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
-import { toast } from "sonner";
-import { useAuth } from "@/hooks/useAuth";
-import { useState, useEffect } from "react";
 
-interface UserProfileData {
-  user_id: number;
-  username: string;
-  fullname: string;
-  email: string;
-  designation: string;
-  company: string;
-  mobile_number: string;
-  profile_image: string | null;
-  role: string;
-}
+import { useState, useEffect } from 'react';
+import Layout from '@/components/layout/Layout';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { useAuth } from '@/hooks/useAuth';
+import { Check, Eye, EyeOff, Upload, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 const UserProfile = () => {
   const { user } = useAuth();
-  const [profileData, setProfileData] = useState<UserProfileData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
-  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  
-  // Password change form state
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: ""
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState({
+    fullName: '',
+    designation: '',
+    phoneNumber: '',
+    email: '',
+    company: '',
+    profileImage: '/placeholder.svg'
   });
+  const [previewImage, setPreviewImage] = useState('/placeholder.svg');
   
-  // Profile edit form state
-  const [profileForm, setProfileForm] = useState({
-    fullname: "",
-    username: "",
-    email: "",
-    designation: "",
-    company: "",
-    mobile_number: "",
-    profile_image: null as File | null
-  });
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  // Image preview
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  
-  // Fetch user profile data
-  const fetchProfileData = async () => {
-    if (!user) return;
-    
-    try {
-      setIsLoading(true);
-      // Use the correct property name (id instead of user_id)
-      const response = await fetch(`/api/profile/?user_id=${user.id}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setProfileData(data.user);
-      } else {
-        toast.error(data.error || "Failed to load profile");
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-      toast.error("Failed to load profile data");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
+  // Fetch user profile from API
   useEffect(() => {
-    if (user) {
-      fetchProfileData();
-    }
-  }, [user]);
+    fetchUserProfile();
+  }, []);
   
-  // Handle password form changes
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setPasswordForm(prev => ({ ...prev, [name]: value }));
-  };
-  
-  // Handle profile form changes
-  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setProfileForm(prev => ({ ...prev, [name]: value }));
-  };
-  
-  // Handle file upload
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      
-      // Check file size (max 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error("File size exceeds 2MB limit");
-        return;
-      }
-      
-      // Check file type
-      if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type)) {
-        toast.error("Only PNG, JPG, and JPEG images are allowed");
-        return;
-      }
-      
-      setProfileForm(prev => ({ ...prev, profile_image: file }));
-      
-      // Set preview
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setImagePreview(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-  
-  // Submit password change
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user) return;
-    
-    // Validate passwords
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast.error("New passwords do not match");
-      return;
-    }
-    
-    if (passwordForm.newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-    
+  const fetchUserProfile = async () => {
+    setProfileLoading(true);
     try {
-      const response = await fetch("/api/change-password", {
-        method: "POST",
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/profile', {
         headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          // Use the correct property name (id instead of user_id)
-          user_id: user.id,
-          current_password: passwordForm.currentPassword,
-          new_password: passwordForm.newPassword
-        })
+          'Authorization': `Bearer ${token}`
+        }
       });
       
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+      
       const data = await response.json();
       
-      if (data.success) {
-        toast.success("Password changed successfully");
-        setIsChangePasswordOpen(false);
-        // Reset form
-        setPasswordForm({
-          currentPassword: "",
-          newPassword: "",
-          confirmPassword: ""
-        });
-      } else {
-        toast.error(data.error || "Failed to change password");
-      }
+      setUserProfile({
+        fullName: data.fullName || '',
+        designation: data.designation || '',
+        phoneNumber: data.phoneNumber || '',
+        email: data.email || '',
+        company: data.companyName || '',
+        profileImage: data.profileImage || '/placeholder.svg'
+      });
+      
+      setPreviewImage(data.profileImage || '/placeholder.svg');
     } catch (error) {
-      console.error("Error changing password:", error);
-      toast.error("Failed to change password");
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to load profile data');
+    } finally {
+      setProfileLoading(false);
     }
   };
   
-  // Open edit profile modal
-  const openEditProfile = () => {
-    if (!profileData) return;
-    
-    setProfileForm({
-      fullname: profileData.fullname || "",
-      username: profileData.username || "",
-      email: profileData.email || "",
-      designation: profileData.designation || "",
-      company: profileData.company || "",
-      mobile_number: profileData.mobile_number || "",
-      profile_image: null
-    });
-    
-    setImagePreview(profileData.profile_image || null);
-    setIsEditProfileOpen(true);
+  // Handle edit profile
+  const handleEditProfile = () => {
+    setIsEditMode(true);
   };
   
-  // Submit profile update
-  const handleProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user) return;
-    
+  // Handle cancel edit
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    fetchUserProfile();
+  };
+  
+  // Handle save profile
+  const handleSaveProfile = async () => {
+    setLoading(true);
     try {
-      // Use FormData to handle file upload
+      const token = localStorage.getItem('token');
       const formData = new FormData();
-      // Use the correct property name (id instead of user_id)
-      formData.append("user_id", user.id.toString());
-      formData.append("fullname", profileForm.fullname);
-      formData.append("username", profileForm.username);
-      formData.append("email", profileForm.email);
-      formData.append("designation", profileForm.designation);
-      formData.append("company", profileForm.company);
-      formData.append("mobile_number", profileForm.mobile_number);
       
-      if (profileForm.profile_image) {
-        formData.append("profile_image", profileForm.profile_image);
+      formData.append('fullName', userProfile.fullName);
+      formData.append('designation', userProfile.designation);
+      formData.append('phoneNumber', userProfile.phoneNumber);
+      formData.append('email', userProfile.email);
+      formData.append('companyName', userProfile.company);
+      
+      // If profile image is File object, add it
+      if (userProfile.profileImage instanceof File) {
+        formData.append('profileImage', userProfile.profileImage);
       }
       
-      const response = await fetch("/api/profile/update", {
-        method: "PUT",
+      const response = await fetch('http://localhost:5000/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData
       });
       
-      const data = await response.json();
-      
-      if (data.success) {
-        toast.success("Profile updated successfully");
-        setIsEditProfileOpen(false);
-        setProfileData(data.user);
-      } else {
-        toast.error(data.error || "Failed to update profile");
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
       }
+      
+      // Refresh profile data
+      await fetchUserProfile();
+      
+      toast.success('Profile updated successfully!');
+      setIsEditMode(false);
     } catch (error) {
-      console.error("Error updating profile:", error);
-      toast.error("Failed to update profile");
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update profile');
+    } finally {
+      setLoading(false);
     }
   };
   
-  if (isLoading) {
+  // Handle profile image change
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check file type
+    if (!file.type.match('image/(jpeg|jpg|png)')) {
+      toast.error('File type not allowed. Please upload a JPG or PNG image.', {
+        duration: 5000,
+      });
+      return;
+    }
+    
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('File size exceeds 2MB limit.', {
+        duration: 5000,
+      });
+      return;
+    }
+    
+    // Create preview URL
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPreviewImage(reader.result as string);
+      setUserProfile({...userProfile, profileImage: file});
+    };
+    reader.readAsDataURL(file);
+  };
+  
+  // Handle password update
+  const handleUpdatePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      toast.error('New password and confirm password do not match.', {
+        duration: 5000,
+      });
+      return;
+    }
+    
+    if (getPasswordStrength(newPassword) < 50) {
+      toast.error('New password is too weak.', {
+        duration: 5000,
+      });
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/change-password', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update password');
+      }
+      
+      toast.success('Password updated successfully!');
+      
+      // Reset form
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      console.error('Error updating password:', error);
+      toast.error('Failed to update password. Please check your current password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Calculate password strength
+  const getPasswordStrength = (password: string) => {
+    if (!password) return 0;
+    
+    let strength = 0;
+    
+    // Length check
+    if (password.length >= 8) strength += 25;
+    
+    // Contains number
+    if (/\d/.test(password)) strength += 25;
+    
+    // Contains lowercase letter
+    if (/[a-z]/.test(password)) strength += 25;
+    
+    // Contains uppercase letter or special char
+    if (/[A-Z]/.test(password) || /[^a-zA-Z0-9]/.test(password)) strength += 25;
+    
+    return strength;
+  };
+  
+  const passwordStrength = getPasswordStrength(newPassword);
+  
+  const getStrengthText = (strength: number) => {
+    if (strength < 25) return 'Very Weak';
+    if (strength < 50) return 'Weak';
+    if (strength < 75) return 'Medium';
+    return 'Strong';
+  };
+  
+  const passwordRequirements = [
+    { text: 'At least 8 characters', met: newPassword.length >= 8 },
+    { text: 'Contains a number', met: /\d/.test(newPassword) },
+    { text: 'Contains a letter', met: /[a-zA-Z]/.test(newPassword) },
+    { text: 'Contains a special character', met: /[^a-zA-Z0-9]/.test(newPassword) }
+  ];
+  
+  if (profileLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-pulse">Loading profile...</div>
-      </div>
+      <Layout>
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-coolant-800 mb-6">User Profile</h1>
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-coolant-400"></div>
+          </div>
+        </div>
+      </Layout>
     );
   }
   
   return (
-    <div className="container mx-auto p-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Profile Image Card */}
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Profile</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
-            <div className="w-40 h-40 rounded-full overflow-hidden mb-4 bg-gray-100 flex items-center justify-center">
-              {profileData?.profile_image ? (
-                <img
-                  src={profileData.profile_image}
-                  alt={profileData.fullname}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="text-4xl text-gray-400">
-                  {profileData?.fullname.charAt(0).toUpperCase() || "U"}
-                </div>
-              )}
-            </div>
-            <h2 className="text-xl font-semibold">{profileData?.fullname}</h2>
-            <p className="text-sm text-gray-600">{profileData?.designation}</p>
-            <p className="text-sm text-gray-600 mb-4">{profileData?.role}</p>
-            
-            <div className="flex flex-col w-full gap-2">
-              <Button onClick={openEditProfile} variant="outline" className="w-full">
-                Edit Profile
-              </Button>
-              <Button
-                onClick={() => setIsChangePasswordOpen(true)}
-                variant="outline"
-                className="w-full"
-              >
-                Change Password
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+    <Layout>
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold text-coolant-800 mb-6">User Profile</h1>
         
-        {/* Profile Details Card */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Profile Details</CardTitle>
-            <CardDescription>Your personal and contact information</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div>
-              <h3 className="text-sm font-medium mb-2">Account Information</h3>
-              <Separator className="mb-4" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-gray-500">Full Name</Label>
-                  <p>{profileData?.fullname}</p>
+        <Tabs defaultValue="general">
+          <TabsList>
+            <TabsTrigger value="general">General Profile</TabsTrigger>
+            <TabsTrigger value="password">Change Password</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="general">
+            <Card>
+              <CardContent className="p-6">
+                {!isEditMode ? (
+                  <div className="flex flex-col md:flex-row gap-8">
+                    <div className="flex-shrink-0">
+                      <div className="w-40 h-40 rounded-full overflow-hidden bg-coolant-100 border-4 border-coolant-200">
+                        <img 
+                          src={previewImage} 
+                          alt={`${userProfile.fullName}'s profile`} 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex-grow space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-medium text-gray-500">Full Name</h3>
+                          <p className="text-lg font-medium">{userProfile.fullName}</p>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-medium text-gray-500">Designation</h3>
+                          <p className="text-lg">{userProfile.designation || '-'}</p>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-medium text-gray-500">Email</h3>
+                          <p className="text-lg">{userProfile.email}</p>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-medium text-gray-500">Role</h3>
+                          <p className="text-lg capitalize">{user?.role}</p>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-medium text-gray-500">Phone Number</h3>
+                          <p className="text-lg">{userProfile.phoneNumber || '-'}</p>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-medium text-gray-500">Company</h3>
+                          <p className="text-lg">{userProfile.company || '-'}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="pt-4">
+                        <Button 
+                          onClick={handleEditProfile}
+                          className="bg-coolant-400 hover:bg-coolant-500"
+                        >
+                          Edit Profile
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="flex flex-col md:flex-row gap-8">
+                      <div className="flex-shrink-0">
+                        <div className="relative w-40 h-40 rounded-full overflow-hidden bg-coolant-100 border-4 border-coolant-200">
+                          <img 
+                            src={previewImage} 
+                            alt="Profile preview" 
+                            className="w-full h-full object-cover"
+                          />
+                          
+                          <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                            <label 
+                              htmlFor="profile-image-upload"
+                              className="cursor-pointer bg-white rounded-full p-2"
+                            >
+                              <Upload className="h-5 w-5 text-coolant-600" />
+                              <input
+                                id="profile-image-upload"
+                                type="file"
+                                accept="image/jpeg,image/png"
+                                onChange={handleImageChange}
+                                className="sr-only"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 text-center mt-2">
+                          Click to change image
+                        </p>
+                      </div>
+                      
+                      <div className="flex-grow space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="full-name">Full Name</Label>
+                            <Input 
+                              id="full-name" 
+                              value={userProfile.fullName}
+                              onChange={(e) => setUserProfile({...userProfile, fullName: e.target.value})}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="designation">Designation</Label>
+                            <Input 
+                              id="designation" 
+                              value={userProfile.designation}
+                              onChange={(e) => setUserProfile({...userProfile, designation: e.target.value})}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input 
+                              id="email" 
+                              type="email"
+                              value={userProfile.email}
+                              onChange={(e) => setUserProfile({...userProfile, email: e.target.value})}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="phone">Phone Number</Label>
+                            <Input 
+                              id="phone" 
+                              type="tel"
+                              value={userProfile.phoneNumber}
+                              onChange={(e) => setUserProfile({...userProfile, phoneNumber: e.target.value})}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="company">Company</Label>
+                            <Input 
+                              id="company" 
+                              value={userProfile.company}
+                              onChange={(e) => setUserProfile({...userProfile, company: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-end space-x-4 pt-4">
+                      <Button 
+                        variant="outline" 
+                        onClick={handleCancelEdit}
+                        disabled={loading}
+                      >
+                        Cancel
+                      </Button>
+                      
+                      <Button 
+                        onClick={handleSaveProfile}
+                        className="bg-coolant-400 hover:bg-coolant-500"
+                        disabled={loading}
+                      >
+                        {loading ? 'Saving...' : 'Save Changes'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="password">
+            <Card>
+              <CardContent className="p-6">
+                <div className="max-w-md mx-auto space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="current-password">Current Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="current-password"
+                        type={showCurrentPassword ? "text" : "password"}
+                        placeholder="Enter your current password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      >
+                        {showCurrentPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="new-password"
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="Enter your new password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    
+                    {newPassword && (
+                      <div className="mt-2 space-y-2">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-coolant-600">Password strength</span>
+                            <span className={`font-medium ${
+                              passwordStrength < 50 ? 'text-red-500' : 
+                              passwordStrength < 75 ? 'text-yellow-500' : 
+                              'text-green-500'
+                            }`}>
+                              {getStrengthText(passwordStrength)}
+                            </span>
+                          </div>
+                          <Progress 
+                            value={passwordStrength} 
+                            className="h-1 w-full bg-gray-200" 
+                          />
+                        </div>
+                        
+                        <ul className="space-y-1">
+                          {passwordRequirements.map((req, i) => (
+                            <li key={i} className="flex items-center text-xs">
+                              {req.met ? (
+                                <Check className="h-3 w-3 mr-2 text-green-500" />
+                              ) : (
+                                <X className="h-3 w-3 mr-2 text-red-500" />
+                              )}
+                              <span className={req.met ? 'text-green-600' : 'text-gray-500'}>
+                                {req.text}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">Confirm New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Confirm your new password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    
+                    {newPassword && confirmPassword && (
+                      <div className="mt-1 flex items-center text-xs">
+                        {newPassword === confirmPassword ? (
+                          <>
+                            <Check className="h-3 w-3 mr-2 text-green-500" />
+                            <span className="text-green-600">Passwords match</span>
+                          </>
+                        ) : (
+                          <>
+                            <X className="h-3 w-3 mr-2 text-red-500" />
+                            <span className="text-red-500">Passwords don't match</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <Button 
+                    onClick={handleUpdatePassword}
+                    className="w-full bg-coolant-400 hover:bg-coolant-500"
+                    disabled={loading || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword || passwordStrength < 50}
+                  >
+                    {loading ? 'Updating...' : 'Update Password'}
+                  </Button>
                 </div>
-                <div>
-                  <Label className="text-xs text-gray-500">Username</Label>
-                  <p>{profileData?.username}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-500">Email</Label>
-                  <p>{profileData?.email}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-500">Role</Label>
-                  <p>{profileData?.role}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="text-sm font-medium mb-2">Work Information</h3>
-              <Separator className="mb-4" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-gray-500">Designation</Label>
-                  <p>{profileData?.designation || "Not specified"}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-500">Company</Label>
-                  <p>{profileData?.company || "Not specified"}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="text-sm font-medium mb-2">Contact Information</h3>
-              <Separator className="mb-4" />
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <Label className="text-xs text-gray-500">Mobile Number</Label>
-                  <p>{profileData?.mobile_number || "Not specified"}</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
-      
-      {/* Change Password Dialog */}
-      <Dialog open={isChangePasswordOpen} onOpenChange={setIsChangePasswordOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Password</DialogTitle>
-            <DialogDescription>
-              Enter your current password and a new password below.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="currentPassword">Current Password</Label>
-              <Input
-                id="currentPassword"
-                name="currentPassword"
-                type="password"
-                value={passwordForm.currentPassword}
-                onChange={handlePasswordChange}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">New Password</Label>
-              <Input
-                id="newPassword"
-                name="newPassword"
-                type="password"
-                value={passwordForm.newPassword}
-                onChange={handlePasswordChange}
-                required
-                minLength={6}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                value={passwordForm.confirmPassword}
-                onChange={handlePasswordChange}
-                required
-                minLength={6}
-              />
-            </div>
-            
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline" type="button">
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button type="submit">Change Password</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Edit Profile Dialog */}
-      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Profile</DialogTitle>
-            <DialogDescription>
-              Update your profile information.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={handleProfileSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="fullname">Full Name</Label>
-              <Input
-                id="fullname"
-                name="fullname"
-                value={profileForm.fullname}
-                onChange={handleProfileChange}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                name="username"
-                value={profileForm.username}
-                onChange={handleProfileChange}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                value={profileForm.email}
-                onChange={handleProfileChange}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="designation">Designation</Label>
-              <Input
-                id="designation"
-                name="designation"
-                value={profileForm.designation}
-                onChange={handleProfileChange}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="company">Company</Label>
-              <Input
-                id="company"
-                name="company"
-                value={profileForm.company}
-                onChange={handleProfileChange}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="mobile_number">Mobile Number</Label>
-              <Input
-                id="mobile_number"
-                name="mobile_number"
-                value={profileForm.mobile_number}
-                onChange={handleProfileChange}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="profile_image">Profile Image (Max 2MB, PNG/JPG)</Label>
-              <Input
-                id="profile_image"
-                name="profile_image"
-                type="file"
-                accept=".png,.jpg,.jpeg"
-                onChange={handleFileChange}
-              />
-              
-              {/* Image Preview */}
-              {imagePreview && (
-                <div className="mt-2">
-                  <p className="text-sm text-gray-500 mb-1">Image Preview:</p>
-                  <img
-                    src={imagePreview}
-                    alt="Profile Preview"
-                    className="w-24 h-24 object-cover rounded-full border border-gray-200"
-                  />
-                </div>
-              )}
-            </div>
-            
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline" type="button">
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button type="submit">Save Changes</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </Layout>
   );
 };
 
