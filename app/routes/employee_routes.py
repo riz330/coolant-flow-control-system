@@ -48,7 +48,7 @@ def get_employees(current_user):
         
         # Get search and filter parameters
         search = request.args.get('search', '')
-        category = request.args.get('category', '')
+        employee_type = request.args.get('employee_type', '')
         
         # Base query
         query = "SELECT * FROM employee_details WHERE 1=1"
@@ -62,11 +62,11 @@ def get_employees(current_user):
             search_param = f'%{search}%'
             params.extend([search_param, search_param, search_param])
         
-        # Add category filter
-        if category:
-            query += " AND category = %s"
-            count_query += " AND category = %s"
-            params.append(category)
+        # Add employee_type filter
+        if employee_type:
+            query += " AND employee_type = %s"
+            count_query += " AND employee_type = %s"
+            params.append(employee_type)
         
         # Add role-based filtering
         if current_user['role'] == 'manager':
@@ -110,21 +110,21 @@ def get_employees(current_user):
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
-# Get employee categories for filter dropdown
-@employee_bp.route('/employees/categories', methods=['GET'])
+# Get employee types for filter dropdown
+@employee_bp.route('/employees/types', methods=['GET'])
 @token_required
-def get_employee_categories(current_user):
+def get_employee_types(current_user):
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        cur.execute("SELECT DISTINCT category FROM employee_details WHERE category IS NOT NULL")
-        categories = [row['category'] for row in cur.fetchall()]
+        cur.execute("SELECT DISTINCT employee_type FROM employee_details WHERE employee_type IS NOT NULL")
+        types = [row['employee_type'] for row in cur.fetchall()]
         
         cur.close()
         conn.close()
         
-        return jsonify({'categories': categories}), 200
+        return jsonify({'types': types}), 200
     
     except Exception as e:
         return jsonify({'message': str(e)}), 500
@@ -137,8 +137,8 @@ def get_managers(current_user):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        cur.execute("SELECT full_name FROM user_details WHERE role = 'manager'")
-        managers = [row['full_name'] for row in cur.fetchall()]
+        cur.execute("SELECT employee_name FROM employee_details WHERE employee_type = 'Manager'")
+        managers = [row['employee_name'] for row in cur.fetchall()]
         
         cur.close()
         conn.close()
@@ -185,8 +185,8 @@ def create_employee(current_user):
             INSERT INTO employee_details (
                 employee_name, address, mobile_number, mobile_country_code,
                 whatsapp_number, whatsapp_country_code, email, employee_type,
-                manager_name, category
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                manager_name
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """, (
             data['employee_name'],
             data['address'],
@@ -196,8 +196,7 @@ def create_employee(current_user):
             data.get('whatsapp_country_code', '+91'),
             data['email'],
             data['employee_type'],
-            data.get('manager_name'),
-            data.get('category')
+            data.get('manager_name')
         ))
         
         new_id = cur.fetchone()['id']
@@ -274,7 +273,7 @@ def update_employee(current_user, id):
         if current_user['role'] == 'employee':
             # Employees can only update their address and phone numbers
             allowed_fields = ['address', 'mobile_number', 'mobile_country_code', 
-                              'whatsapp_number', 'whatsapp_country_code']
+                             'whatsapp_number', 'whatsapp_country_code']
             
             update_data = {k: v for k, v in data.items() if k in allowed_fields}
             
@@ -333,8 +332,7 @@ def update_employee(current_user, id):
                     whatsapp_country_code = %s,
                     email = %s,
                     employee_type = %s,
-                    manager_name = %s,
-                    category = %s
+                    manager_name = %s
                 WHERE id = %s
             """, (
                 data['employee_name'],
@@ -346,7 +344,6 @@ def update_employee(current_user, id):
                 data['email'],
                 data['employee_type'],
                 data.get('manager_name'),
-                data.get('category'),
                 id
             ))
             conn.commit()

@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS employee_details (
   email VARCHAR(255) NOT NULL,
   employee_type VARCHAR(50) NOT NULL, -- 'Distributor' or 'Manager'
   manager_name VARCHAR(255),
-  category VARCHAR(100),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -20,7 +19,6 @@ CREATE TABLE IF NOT EXISTS employee_details (
 CREATE INDEX IF NOT EXISTS idx_employee_manager_name ON employee_details(manager_name);
 CREATE INDEX IF NOT EXISTS idx_employee_email ON employee_details(email);
 CREATE INDEX IF NOT EXISTS idx_employee_type ON employee_details(employee_type);
-CREATE INDEX IF NOT EXISTS idx_employee_category ON employee_details(category);
 
 -- Add constraints
 ALTER TABLE employee_details
